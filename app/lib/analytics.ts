@@ -415,6 +415,23 @@ export function extractJourneyInsights(
   });
 }
 
+// 시각화용 L2 색상 팔레트 (L1 그룹별 톤 일관, 같은 그룹은 명도 차이로 구분)
+export const L2_COLORS: Record<string, string> = {
+  "화면 혼란/어포던스": "#93c5fd",
+  "피드백 부재": "#3b82f6",
+  "안내·메시지 부족": "#1d4ed8",
+  "기능 오류": "#fca5a5",
+  "성능·안정성": "#ef4444",
+  "업데이트 회귀": "#991b1b",
+  "인증 실패": "#c084fc",
+  "절차·빈도 과다": "#7e22ce",
+  "광고·알림 과다": "#fcd34d",
+  "수수료·한도": "#f59e0b",
+  "CS 불만": "#b45309",
+  "만족·칭찬": "#10b981",
+  "_근거부족·다중가설": "#a3a3a3",
+};
+
 export type SentimentRatingCell = {
   rating: number;
   sentiment: Sentiment;

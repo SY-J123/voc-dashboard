@@ -1,11 +1,20 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+
+import {
+  Cell,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+} from "recharts";
 
 import {
   buildPivot,
   extractInsights,
   extractJourneyInsights,
+  L2_COLORS,
   type JourneyInsight,
   type ProblemInsight,
 } from "../../lib/analytics";
@@ -319,6 +328,312 @@ function HeatmapSelectionPanel({
   );
 }
 
+function DonutTooltip({
+  active,
+  payload,
+  totalNeg,
+}: {
+  active?: boolean;
+  payload?: { payload?: { name: string; value: number; l1: string } }[];
+  totalNeg: number;
+}) {
+  if (!active || !payload?.[0]?.payload) return null;
+  const n = payload[0].payload;
+  const ratio = totalNeg > 0 ? (n.value / totalNeg) * 100 : 0;
+  return (
+    <div className="rounded bg-neutral-900 px-3 py-2 text-xs text-white shadow-lg">
+      <div className="font-semibold">{n.name}</div>
+      <div className="text-neutral-300">{n.l1}</div>
+      <div className="mt-1 tabular-nums">
+        부정 {n.value}건 · {ratio.toFixed(0)}%
+      </div>
+    </div>
+  );
+}
+
+type L2Slice = { name: string; value: number; l1: string };
+
+function AppSidebar() {
+  const items = [
+    "요약",
+    "여정 분석",
+    "문제 유형",
+    "리뷰 탐색",
+    "검수 필요",
+    "인사이트",
+    "리포트",
+  ];
+
+  return (
+    <aside className="hidden xl:flex min-h-[calc(100vh-9rem)] flex-col justify-between border-r border-neutral-200 bg-white px-3 py-4">
+      <div>
+        <div className="mb-5 flex items-center gap-2 px-2">
+          <div className="h-7 w-7 rounded-lg bg-blue-600" />
+          <div>
+            <div className="text-sm font-semibold text-neutral-950">
+              토스 VOC
+            </div>
+            <div className="text-[11px] text-neutral-400">analysis</div>
+          </div>
+        </div>
+        <nav className="space-y-1">
+          {items.map((item, idx) => (
+            <button
+              key={item}
+              type="button"
+              className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors ${
+                idx === 0
+                  ? "bg-blue-50 font-medium text-blue-700"
+                  : "text-neutral-600 hover:bg-neutral-50"
+              }`}
+            >
+              <span
+                className={`h-2 w-2 rounded-full ${
+                  idx === 0 ? "bg-blue-600" : "bg-neutral-300"
+                }`}
+              />
+              {item}
+            </button>
+          ))}
+        </nav>
+      </div>
+      <button
+        type="button"
+        className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-neutral-600 hover:bg-neutral-50"
+      >
+        <span className="h-2 w-2 rounded-full bg-neutral-300" />
+        설정
+      </button>
+    </aside>
+  );
+}
+
+function TopTaskList({
+  priorities,
+  activeRank,
+  onSelect,
+}: {
+  priorities: ProblemInsight[];
+  activeRank: number;
+  onSelect: (idx: number) => void;
+}) {
+  const max = priorities[0]?.negCount ?? 1;
+
+  return (
+    <section className="rounded-lg border border-neutral-200 bg-white p-4">
+      <div className="mb-3 flex items-center justify-between">
+        <div>
+          <h3 className="text-base font-semibold tracking-tight">
+            Top 개선 과제
+          </h3>
+          <p className="mt-1 text-xs text-neutral-500">부정 리뷰 기준</p>
+        </div>
+        <span className="text-xs text-neutral-400">비율</span>
+      </div>
+      <div className="space-y-2">
+        {priorities.slice(0, 5).map((item, idx) => {
+          const active = idx === activeRank;
+          return (
+            <button
+              key={`${item.l1}|${item.l2}`}
+              type="button"
+              onClick={() => onSelect(idx)}
+              className={`w-full rounded-md border p-2.5 text-left transition-colors ${
+                active
+                  ? "border-red-200 bg-red-50"
+                  : "border-transparent hover:border-neutral-200 hover:bg-neutral-50"
+              }`}
+            >
+              <div className="grid grid-cols-[1.75rem_1fr_auto] items-center gap-2">
+                <div
+                  className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold ${
+                    idx === 0
+                      ? "bg-red-500 text-white"
+                      : idx === 1
+                        ? "bg-orange-500 text-white"
+                        : idx === 2
+                          ? "bg-amber-400 text-amber-950"
+                          : "bg-neutral-200 text-neutral-600"
+                  }`}
+                >
+                  {idx + 1}
+                </div>
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-semibold text-neutral-900">
+                    {item.l2}
+                  </div>
+                  <div className="truncate text-[11px] text-neutral-400">
+                    {item.topJourneys[0]?.journey ?? "-"} &gt; {item.l1}
+                  </div>
+                </div>
+                <div className="text-right text-xs tabular-nums text-neutral-500">
+                  {item.pctOfAll.toFixed(1)}%
+                </div>
+              </div>
+              <div className="mt-2 ml-8 h-1.5 rounded-full bg-neutral-100">
+                <div
+                  className="h-full rounded-full bg-red-500"
+                  style={{
+                    width: `${Math.max(5, (item.negCount / max) * 100)}%`,
+                  }}
+                />
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function SelectedTaskPanel({ insight }: { insight: ProblemInsight | undefined }) {
+  if (!insight) return null;
+  const review = insight.representatives[0];
+
+  return (
+    <section className="rounded-lg border border-neutral-200 bg-white p-4">
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="flex items-center gap-2">
+            <h3 className="text-lg font-semibold tracking-tight">
+              선택한 과제 상세
+            </h3>
+            <span className="rounded bg-red-50 px-1.5 py-0.5 text-[11px] font-medium text-red-600">
+              최우선
+            </span>
+          </div>
+          <div className="mt-2 flex flex-wrap items-baseline gap-2">
+            <div className="text-xl font-semibold text-neutral-950">
+              {insight.l2}
+            </div>
+            <div className="text-xs text-neutral-400">
+              {insight.topJourneys[0]?.journey ?? "-"} &gt; {insight.l1}
+            </div>
+          </div>
+          <p className="mt-1 text-xs text-neutral-500">
+            부정 리뷰 {insight.negCount.toLocaleString()}건 · 전체 부정의{" "}
+            {insight.pctOfAll.toFixed(1)}%
+          </p>
+        </div>
+      </div>
+
+      <div className="grid gap-3 lg:grid-cols-[1fr_0.9fr_1.5fr_1fr]">
+        <div className="rounded-lg border border-neutral-100 bg-neutral-50 p-3">
+          <div className="mb-2 text-xs font-medium text-neutral-500">
+            주요 키워드
+          </div>
+          <KeywordBars keywords={insight.topKeywords} />
+        </div>
+        <div className="rounded-lg border border-neutral-100 bg-neutral-50 p-3">
+          <div className="mb-2 text-xs font-medium text-neutral-500">
+            감정 키워드
+          </div>
+          <div className="space-y-1.5">
+            {insight.topEmotions.slice(0, 5).map((emotion) => (
+              <div
+                key={emotion.keyword}
+                className="flex items-center justify-between rounded bg-red-50 px-2 py-1 text-xs"
+              >
+                <span className="font-medium text-red-700">
+                  {emotion.keyword}
+                </span>
+                <span className="tabular-nums text-red-400">
+                  {emotion.count}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="rounded-lg border border-neutral-100 bg-white p-3">
+          <div className="mb-2 text-xs font-medium text-neutral-500">
+            대표 리뷰
+          </div>
+          {review && (
+            <blockquote className="text-sm leading-relaxed text-neutral-700">
+              <div className="mb-1 text-xs text-neutral-400">
+                ★{review.rating} · 좋아요 {review.thumbs_up}
+              </div>
+              {review.text.length > 210
+                ? `${review.text.slice(0, 210).trimEnd()}...`
+                : review.text}
+            </blockquote>
+          )}
+        </div>
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+          <div className="mb-2 flex items-center justify-between">
+            <div className="text-xs font-medium text-amber-900">추천 액션</div>
+            <span className="rounded bg-red-500 px-1.5 py-0.5 text-[11px] font-semibold text-white">
+              P1
+            </span>
+          </div>
+          <div className="space-y-2 text-xs leading-relaxed">
+            <div>
+              <div className="text-amber-800">담당</div>
+              <div className="font-medium text-neutral-900">
+                {insight.action.team}
+              </div>
+            </div>
+            <div>
+              <div className="text-amber-800">액션</div>
+              <div className="font-medium text-neutral-900">
+                {insight.action.suggestion}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function DataQualityPanel({
+  stats,
+  period,
+}: {
+  stats: { total: number; negative: number; ambiguous: number };
+  period: string;
+}) {
+  return (
+    <aside className="space-y-3">
+      <section className="rounded-lg border border-neutral-200 bg-white p-4">
+        <div className="mb-3 text-sm font-semibold tracking-tight">
+          데이터 신뢰도
+        </div>
+        <div className="rounded-lg bg-blue-50 p-3">
+          <div className="text-xs text-blue-700">감정·별점 일치율</div>
+          <div className="mt-1 text-2xl font-semibold text-blue-700">86.7%</div>
+        </div>
+      </section>
+      <section className="rounded-lg border border-neutral-200 bg-white p-4">
+        <div className="text-sm font-semibold tracking-tight">검수 필요 리뷰</div>
+        <div className="mt-2 text-2xl font-semibold text-orange-500 tabular-nums">
+          {stats.ambiguous.toLocaleString()}건
+        </div>
+        <div className="mt-1 text-xs text-neutral-400">
+          전체의 {pct(stats.ambiguous, stats.total)}
+        </div>
+      </section>
+      <section className="rounded-lg border border-neutral-200 bg-white p-4">
+        <div className="text-sm font-semibold tracking-tight">메타 정보</div>
+        <dl className="mt-3 space-y-2 text-xs">
+          <div className="flex justify-between gap-3">
+            <dt className="text-neutral-400">데이터 기간</dt>
+            <dd className="text-right text-neutral-700">{period}</dd>
+          </div>
+          <div className="flex justify-between gap-3">
+            <dt className="text-neutral-400">리뷰 출처</dt>
+            <dd className="text-right text-neutral-700">Google Play</dd>
+          </div>
+          <div className="flex justify-between gap-3">
+            <dt className="text-neutral-400">분석 모델</dt>
+            <dd className="text-right text-neutral-700">Claude Haiku 4.5</dd>
+          </div>
+        </dl>
+      </section>
+    </aside>
+  );
+}
+
 function JourneyDetailSection({
   journeys,
   activeJourney,
@@ -335,22 +650,117 @@ function JourneyDetailSection({
   const active = journeys.find((j) => j.journey === activeJourney) ?? journeys[0];
   const top = active?.topIssue;
 
-  const representative = useMemo(() => {
-    if (!active || !top) return null;
-    return reviews
-      .filter(
-        (r) =>
-          r.journey_stage === active.journey &&
-          r.problem_type_l1 === top.l1 &&
-          r.problem_type_l2 === top.l2 &&
-          r.sentiment_label === "부정",
-      )
-      .sort(
-        (a, b) =>
-          b.thumbs_up - a.thumbs_up ||
-          b.cleaned_text.length - a.cleaned_text.length,
-      )[0];
-  }, [active, reviews, top]);
+  // 여정의 L2 분포 (도넛용) + L2별 키워드 맵 + L2별 부정 리뷰 버킷
+  const journeyData = useMemo(() => {
+    if (!active) {
+      return {
+        slices: [] as L2Slice[],
+        keywordsByL2: new Map<string, { keyword: string; count: number }[]>(),
+        bucketsByL2: new Map<string, ClassifiedReview[]>(),
+      };
+    }
+    const sliceMap = new Map<string, { value: number; l1: string }>();
+    const keywordsByL2 = new Map<string, Map<string, number>>();
+    const bucketsByL2 = new Map<string, ClassifiedReview[]>();
+
+    for (const r of reviews) {
+      if (r.journey_stage !== active.journey) continue;
+      if (r.sentiment_label !== "부정") continue;
+      if (r.problem_type_l1 === "긍정") continue;
+      if (r.problem_type_l1 === "_미분류") continue;
+      const l2 = r.problem_type_l2;
+      const slice = sliceMap.get(l2);
+      if (slice) slice.value += 1;
+      else sliceMap.set(l2, { value: 1, l1: r.problem_type_l1 });
+
+      if (!keywordsByL2.has(l2)) keywordsByL2.set(l2, new Map());
+      const kw = keywordsByL2.get(l2)!;
+      for (const k of r.problem_keywords ?? [])
+        kw.set(k, (kw.get(k) ?? 0) + 1);
+
+      if (!bucketsByL2.has(l2)) bucketsByL2.set(l2, []);
+      bucketsByL2.get(l2)!.push(r);
+    }
+
+    const slices: L2Slice[] = [...sliceMap.entries()]
+      .map(([name, info]) => ({ name, value: info.value, l1: info.l1 }))
+      .sort((a, b) => b.value - a.value);
+
+    const finalKeywords = new Map<
+      string,
+      { keyword: string; count: number }[]
+    >();
+    for (const [l2, m] of keywordsByL2) {
+      finalKeywords.set(
+        l2,
+        [...m.entries()]
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 8)
+          .map(([keyword, count]) => ({ keyword, count })),
+      );
+    }
+    return { slices, keywordsByL2: finalKeywords, bucketsByL2 };
+  }, [active, reviews]);
+
+  // 도넛 슬라이스 / 리스트에서 선택된 L2. 기본은 top L2
+  const [focusL2, setFocusL2] = useState<string | null>(null);
+  useEffect(() => {
+    setFocusL2(null); // 여정 바뀌면 reset
+  }, [active?.journey]);
+
+  const effectiveFocusL2 =
+    focusL2 ?? top?.l2 ?? journeyData.slices[0]?.name ?? null;
+
+  const focusedKeywords = effectiveFocusL2
+    ? journeyData.keywordsByL2.get(effectiveFocusL2) ?? []
+    : [];
+
+  // 대표 리뷰: focused L2 의 부정 리뷰 풀에서 무작위 / 좋아요+길이 정렬
+  const repBucket = useMemo(() => {
+    if (!effectiveFocusL2) return [];
+    return [...(journeyData.bucketsByL2.get(effectiveFocusL2) ?? [])].sort(
+      (a, b) =>
+        b.thumbs_up - a.thumbs_up ||
+        b.cleaned_text.length - a.cleaned_text.length,
+    );
+  }, [journeyData.bucketsByL2, effectiveFocusL2]);
+
+  const [randIdx, setRandIdx] = useState<number | null>(null);
+  useEffect(() => {
+    setRandIdx(null);
+  }, [active?.journey, effectiveFocusL2]);
+
+  const representative =
+    repBucket.length === 0
+      ? null
+      : randIdx === null
+        ? repBucket[0]
+        : repBucket[randIdx];
+
+  const refresh = () => {
+    if (repBucket.length <= 1) return;
+    let next = randIdx;
+    let attempts = 0;
+    while (
+      (next === randIdx || (randIdx === null && next === 0)) &&
+      attempts < 8
+    ) {
+      next = Math.floor(Math.random() * repBucket.length);
+      attempts += 1;
+    }
+    setRandIdx(next);
+  };
+
+  const focusedSlice = journeyData.slices.find(
+    (s) => s.name === effectiveFocusL2,
+  );
+  const focusedShare =
+    active && focusedSlice && active.totalNeg > 0
+      ? (focusedSlice.value / active.totalNeg) * 100
+      : 0;
+
+  const negShare =
+    active && active.totalAll > 0 ? (active.totalNeg / active.totalAll) * 100 : 0;
 
   if (!active) return null;
 
@@ -419,17 +829,32 @@ function JourneyDetailSection({
 
       <section className="rounded-lg border border-neutral-200 bg-white p-5">
         <div className="flex flex-wrap items-start justify-between gap-3 border-b border-neutral-100 pb-4">
-          <div>
+          <div className="min-w-0">
             <div className="text-xs font-medium text-neutral-500">
               선택 여정
             </div>
-            <h3 className="mt-1 text-xl font-semibold tracking-tight">
+            <h3 className="mt-1 text-2xl font-semibold tracking-tight">
               {active.journey}
             </h3>
-            <p className="mt-1 text-sm text-neutral-500">
-              부정 {active.totalNeg}건 · 전체 {active.totalAll}건 · 부정 비중{" "}
-              {pct(active.totalNeg, active.totalAll)}
-            </p>
+            <div className="mt-3 flex items-baseline gap-3">
+              <div>
+                <span className="text-3xl font-bold tabular-nums">
+                  {active.totalNeg}
+                </span>
+                <span className="ml-1 text-sm text-neutral-500">
+                  / {active.totalAll}건
+                </span>
+              </div>
+              <span className="rounded bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800 tabular-nums">
+                부정 {negShare.toFixed(0)}%
+              </span>
+            </div>
+            <div className="mt-2 h-1.5 w-72 max-w-full overflow-hidden rounded-full bg-neutral-100">
+              <div
+                className="h-full bg-red-500"
+                style={{ width: `${negShare}%` }}
+              />
+            </div>
           </div>
           {top && (
             <button
@@ -444,69 +869,147 @@ function JourneyDetailSection({
           )}
         </div>
 
-        {!top ? (
+        {!top || journeyData.slices.length === 0 ? (
           <div className="mt-5 rounded-lg bg-neutral-50 p-4 text-sm text-neutral-500">
             이 여정에는 집계된 부정 핵심 이슈가 없습니다.
           </div>
         ) : (
           <>
+            {/* 도넛 + 키워드 bars */}
             <div className="mt-5 grid gap-5 xl:grid-cols-[1fr_1fr]">
+              {/* 좌: L2 도넛 */}
               <div>
-                <div className="text-xs font-medium text-neutral-500">
-                  핵심 이슈
+                <div className="mb-2 text-xs font-medium text-neutral-500">
+                  L2 분포 — 슬라이스 클릭으로 키워드·리뷰 필터
                 </div>
-                <div className="mt-1 flex flex-wrap items-baseline gap-2">
-                  <div className="text-xl font-semibold text-neutral-950">
-                    {top.l2}
+                <div className="relative" style={{ height: 240 }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={journeyData.slices}
+                        dataKey="value"
+                        nameKey="name"
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={62}
+                        outerRadius={100}
+                        paddingAngle={2}
+                        stroke="#fff"
+                        strokeWidth={2}
+                        onClick={(slice: { name?: string }) => {
+                          if (slice?.name) setFocusL2(slice.name);
+                        }}
+                        isAnimationActive={false}
+                      >
+                        {journeyData.slices.map((s) => (
+                          <Cell
+                            key={s.name}
+                            fill={L2_COLORS[s.name] ?? "#a3a3a3"}
+                            stroke={
+                              effectiveFocusL2 === s.name ? "#171717" : "#fff"
+                            }
+                            strokeWidth={effectiveFocusL2 === s.name ? 2 : 2}
+                            cursor="pointer"
+                          />
+                        ))}
+                      </Pie>
+                      <Tooltip
+                        content={
+                          <DonutTooltip totalNeg={active.totalNeg} />
+                        }
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                  <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center">
+                    <div className="text-[10px] font-medium uppercase tracking-wide text-neutral-400">
+                      Focus
+                    </div>
+                    <div
+                      className="mt-0.5 max-w-[140px] truncate text-sm font-semibold text-neutral-900"
+                      title={effectiveFocusL2 ?? ""}
+                    >
+                      {effectiveFocusL2 ?? "—"}
+                    </div>
+                    <div className="text-xs tabular-nums text-neutral-500">
+                      {focusedSlice?.value ?? 0} · {focusedShare.toFixed(0)}%
+                    </div>
                   </div>
-                  <div className="text-sm text-neutral-500">{top.l1}</div>
                 </div>
-                <div className="mt-1 text-sm text-neutral-500">
-                  부정 {top.count}건 · 이 여정 부정의{" "}
-                  {top.pctOfJourney.toFixed(0)}%
-                </div>
-                <div className="mt-4">
-                  <div className="mb-2 text-xs font-medium text-neutral-500">
-                    자주 등장한 문제 키워드
-                  </div>
-                  <KeywordBars keywords={top.keywords} />
+                {/* 슬라이스 리스트 (클릭 = focus 전환) */}
+                <div className="mt-3 space-y-1 text-xs">
+                  {journeyData.slices.map((s) => {
+                    const isFocus = effectiveFocusL2 === s.name;
+                    const ratio =
+                      active.totalNeg > 0
+                        ? (s.value / active.totalNeg) * 100
+                        : 0;
+                    return (
+                      <button
+                        key={s.name}
+                        type="button"
+                        onClick={() => setFocusL2(s.name)}
+                        className={`flex w-full items-center justify-between gap-2 rounded px-2 py-1 text-left ${
+                          isFocus
+                            ? "bg-neutral-100 font-medium"
+                            : "hover:bg-neutral-50"
+                        }`}
+                      >
+                        <span className="flex min-w-0 items-center gap-1.5">
+                          <span
+                            className="inline-block h-2.5 w-2.5 flex-shrink-0 rounded-sm"
+                            style={{
+                              background: L2_COLORS[s.name] ?? "#a3a3a3",
+                            }}
+                          />
+                          <span className="truncate">{s.name}</span>
+                          <span className="text-neutral-400">{s.l1}</span>
+                        </span>
+                        <span className="tabular-nums text-neutral-500">
+                          {s.value}
+                          <span className="ml-1 text-neutral-400">
+                            ({ratio.toFixed(0)}%)
+                          </span>
+                        </span>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
+              {/* 우: 키워드 bars */}
               <div>
-                <div className="mb-2 text-xs font-medium text-neutral-500">
-                  감정 어휘
+                <div className="mb-2 flex items-baseline justify-between gap-2 text-xs">
+                  <div className="font-medium text-neutral-500">
+                    자주 등장한 키워드
+                  </div>
+                  <div
+                    className="truncate text-neutral-400"
+                    title={effectiveFocusL2 ?? ""}
+                  >
+                    {effectiveFocusL2 ?? "—"}
+                  </div>
                 </div>
-                <div className="flex flex-wrap gap-1.5">
-                  {top.emotions.length === 0 ? (
-                    <span className="text-xs text-neutral-400">
-                      집계된 감정 어휘 없음
-                    </span>
-                  ) : (
-                    top.emotions.map((e) => (
-                      <span
-                        key={e.keyword}
-                        className="rounded-md bg-red-50 px-2 py-1 text-xs font-medium text-red-700"
-                      >
-                        {e.keyword} <span className="opacity-60">{e.count}</span>
-                      </span>
-                    ))
-                  )}
-                </div>
+                {focusedKeywords.length === 0 ? (
+                  <div className="rounded-md bg-neutral-50 p-3 text-xs text-neutral-400">
+                    이 L2에는 추출된 키워드가 없습니다.
+                  </div>
+                ) : (
+                  <KeywordBars keywords={focusedKeywords} />
+                )}
 
-                {active.secondaryIssues.length > 0 && (
+                {top.emotions.length > 0 && (
                   <div className="mt-5">
                     <div className="mb-2 text-xs font-medium text-neutral-500">
-                      같이 자주 나타나는 추가 이슈
+                      감정 어휘 (이 여정의 주된 문제 기준)
                     </div>
                     <div className="flex flex-wrap gap-1.5">
-                      {active.secondaryIssues.map((issue) => (
+                      {top.emotions.map((e) => (
                         <span
-                          key={`${issue.l1}|${issue.l2}`}
-                          className="rounded-md bg-neutral-100 px-2 py-1 text-xs text-neutral-700"
+                          key={e.keyword}
+                          className="rounded-md bg-red-50 px-2 py-1 text-xs font-medium text-red-700"
                         >
-                          {issue.l2}{" "}
-                          <span className="text-neutral-400">{issue.count}</span>
+                          {e.keyword}{" "}
+                          <span className="opacity-60">{e.count}</span>
                         </span>
                       ))}
                     </div>
@@ -515,14 +1018,30 @@ function JourneyDetailSection({
               </div>
             </div>
 
+            {/* 대표 리뷰 + 새로고침 */}
             {representative && (
               <div className="mt-5 border-t border-neutral-100 pt-4">
-                <div className="mb-2 text-xs font-medium text-neutral-500">
-                  대표 리뷰
+                <div className="mb-2 flex items-center justify-between">
+                  <div className="text-xs font-medium text-neutral-500">
+                    대표 리뷰{" "}
+                    <span className="text-neutral-400">
+                      · {effectiveFocusL2}
+                    </span>
+                  </div>
+                  {repBucket.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={refresh}
+                      className="text-xs text-neutral-500 hover:text-neutral-900"
+                    >
+                      ↻ 다른 리뷰
+                    </button>
+                  )}
                 </div>
                 <blockquote className="border-l-2 border-neutral-300 pl-3 text-sm leading-relaxed text-neutral-700">
                   <div className="mb-1 text-xs text-neutral-400">
-                    ★{representative.rating} · 좋아요 {representative.thumbs_up}
+                    ★{representative.rating} · 좋아요{" "}
+                    {representative.thumbs_up}
                   </div>
                   {representative.cleaned_text.length > 260
                     ? `${representative.cleaned_text.slice(0, 260).trimEnd()}...`
@@ -531,9 +1050,11 @@ function JourneyDetailSection({
               </div>
             )}
 
+            {/* 액션 (이 여정의 주된 문제 기준) */}
             <div className="mt-5 rounded-lg bg-amber-50 p-4">
               <div className="text-xs font-medium text-amber-900">
-                {top.action.team}
+                {top.action.team}{" "}
+                <span className="text-amber-700/70">· {top.l2}</span>
               </div>
               <div className="mt-1 text-sm font-medium text-neutral-900">
                 {top.action.suggestion}
@@ -594,180 +1115,208 @@ export default function DecisionDashboardClient({
   }, [reviews, selectedCell]);
 
   const activeInsight = priorities[activeRank] ?? priorities[0];
+  const period = useMemo(() => {
+    const dates = reviews
+      .map((review) => review.review_date)
+      .filter(Boolean)
+      .sort();
+    if (dates.length === 0) return "-";
+    return `${dates[0]} ~ ${dates[dates.length - 1]}`;
+  }, [reviews]);
 
   return (
-    <article className="space-y-6">
-      <section className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <div className="text-sm font-medium text-orange-700">
-            개선 우선순위 보드
-          </div>
-          <h2 className="mt-1 text-3xl font-bold tracking-tight">
-            토스 VOC 대시보드
-          </h2>
-          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-neutral-500">
-            부정 리뷰가 어디에 몰리는지, 어떤 문제부터 제품팀 백로그로
-            가져가야 하는지 한 화면에서 판단합니다.
-          </p>
-        </div>
-        <div className="rounded-full border border-neutral-200 bg-white px-3 py-1 text-xs text-neutral-500">
-          Google Play 리뷰 스냅샷
-        </div>
-      </section>
+    <article className="-mx-6 -my-8 bg-neutral-50">
+      <div className="grid min-h-[calc(100vh-8rem)] xl:grid-cols-[13rem_minmax(0,1fr)]">
+        <AppSidebar />
 
-      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard
-          label="전체 리뷰"
-          value={stats.total.toLocaleString()}
-          hint="LLM 분류 완료 리뷰"
-        />
-        <StatCard
-          label="부정 비율"
-          value={pct(stats.negative, stats.total)}
-          hint={`${stats.negative.toLocaleString()}건`}
-          tone="danger"
-        />
-        <StatCard
-          label="최우선 과제"
-          value={stats.topLabel}
-          hint={stats.topHint}
-          tone="amber"
-        />
-        <StatCard
-          label="검수 필요"
-          value={stats.ambiguous.toLocaleString()}
-          hint={pct(stats.ambiguous, stats.total)}
-        />
-      </section>
-
-      <JourneyDetailSection
-        journeys={journeys}
-        activeJourney={activeJourney}
-        reviews={reviews}
-        onSelectJourney={setActiveJourney}
-        onSelectCell={setSelectedCell}
-      />
-
-      <section className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_24rem]">
-        <div className="rounded-lg border border-neutral-200 bg-white">
-          <div className="flex flex-wrap items-end justify-between gap-3 border-b border-neutral-100 px-5 py-4">
-            <div>
-              <h3 className="text-lg font-semibold tracking-tight">
-                여정 × 문제 유형
-              </h3>
-              <p className="mt-1 text-xs text-neutral-500">
-                셀은 부정 리뷰 건수입니다. 클릭하면 대표 리뷰를 확인합니다.
-              </p>
+        <div className="space-y-4 p-5">
+          <section className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="h-9 w-9 rounded-xl bg-blue-600" />
+              <div>
+                <h2 className="text-2xl font-bold tracking-tight">
+                  토스 VOC 대시보드
+                </h2>
+                <p className="text-xs text-neutral-500">
+                  하단은 선택한 과제의 키워드 / 감정 / 대표 리뷰 / 추천 액션
+                </p>
+              </div>
             </div>
-            <div className="text-xs text-neutral-400">
-              진할수록 개선 우선순위 높음
-            </div>
-          </div>
-          <div className="overflow-x-auto p-4">
-            <table className="w-full min-w-[720px] border-separate border-spacing-1 text-sm">
-              <thead>
-                <tr>
-                  <th className="w-36 px-2 py-2 text-left text-xs font-medium text-neutral-500">
-                    여정
-                  </th>
-                  {shownProblemTypes.map((l1) => (
-                    <th
-                      key={l1}
-                      className="px-2 py-2 text-center text-xs font-medium text-neutral-500"
-                    >
-                      {l1}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {JOURNEY_STAGES.filter((j) => j !== "_미상").map((journey) => {
-                  const journeyMeta = journeys.find((j) => j.journey === journey);
-                  return (
-                    <tr key={journey}>
-                      <th className="px-2 py-2 text-left align-middle">
-                        <div className="font-medium text-neutral-800">
-                          {journey}
-                        </div>
-                        <div className="text-[11px] text-neutral-400">
-                          부정 {journeyMeta?.totalNeg ?? 0}
-                        </div>
-                      </th>
-                      {shownProblemTypes.map((l1) => {
-                        const count = pivot.neg[journey][l1];
-                        const total = count + pivot.pos[journey][l1];
-                        const isSelected =
-                          selectedCell?.journey === journey &&
-                          selectedCell?.l1 === l1;
-                        return (
-                          <td key={l1} className="p-0.5">
-                            <button
-                              type="button"
-                              disabled={total === 0}
-                              onClick={() =>
-                                setSelectedCell(
-                                  isSelected ? null : { journey, l1 },
-                                )
-                              }
-                              className={`h-16 w-full rounded-md px-2 text-center transition ${heatClass(
-                                count,
-                                pivot.max,
-                                isSelected,
-                              )} ${
-                                total > 0
-                                  ? "cursor-pointer hover:scale-[1.02]"
-                                  : "cursor-default"
-                              }`}
-                            >
-                              <div className="text-lg font-semibold tabular-nums">
-                                {count}
-                              </div>
-                              <div className="text-[11px] opacity-70">
-                                {pct(count, stats.negative)}
-                              </div>
-                            </button>
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
 
-        <HeatmapSelectionPanel
-          selectedCell={selectedCell}
-          selectedReviews={selectedReviews}
-          onClose={() => setSelectedCell(null)}
-        />
-      </section>
-
-      <section className="grid gap-5 xl:grid-cols-[24rem_minmax(0,1fr)]">
-        <aside className="space-y-3">
-          <div className="rounded-lg border border-neutral-200 bg-white p-5">
-            <div>
-              <h3 className="text-lg font-semibold tracking-tight">
-                Top 개선 과제
-              </h3>
-              <p className="mt-1 text-xs text-neutral-500">
-                부정 빈도 기준으로 정렬했습니다.
-              </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <button className="rounded-md border border-neutral-200 bg-white px-3 py-2 text-xs font-medium text-neutral-700">
+                {period}
+              </button>
+              <button className="rounded-md border border-neutral-200 bg-white px-3 py-2 text-xs font-medium text-neutral-700">
+                전체 앱
+              </button>
+              <button className="rounded-md border border-neutral-200 bg-white px-3 py-2 text-xs font-medium text-neutral-700">
+                필터
+              </button>
+              <div className="text-xs text-neutral-400">
+                데이터 기준: {stats.total.toLocaleString()}건
+              </div>
             </div>
-          </div>
-          {priorities.map((item, idx) => (
-            <PriorityItem
-              key={`${item.l1}|${item.l2}`}
-              insight={item}
-              active={idx === activeRank}
-              onSelect={() => setActiveRank(idx)}
+          </section>
+
+          <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <StatCard
+              label="전체 리뷰"
+              value={stats.total.toLocaleString()}
+              hint="전 기간 대비 집계"
             />
-          ))}
-        </aside>
+            <StatCard
+              label="부정 비율"
+              value={pct(stats.negative, stats.total)}
+              hint={`${stats.negative.toLocaleString()}건`}
+              tone="danger"
+            />
+            <StatCard
+              label="최우선 과제"
+              value={stats.topLabel}
+              hint={stats.topHint}
+              tone="amber"
+            />
+            <StatCard
+              label="검수 필요"
+              value={stats.ambiguous.toLocaleString()}
+              hint={pct(stats.ambiguous, stats.total)}
+            />
+          </section>
 
-        <EvidencePanel insight={activeInsight} />
-      </section>
+          <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_26rem]">
+            <div className="rounded-lg border border-neutral-200 bg-white">
+              <div className="flex flex-wrap items-end justify-between gap-3 border-b border-neutral-100 px-4 py-3">
+                <div>
+                  <h3 className="text-base font-semibold tracking-tight">
+                    여정 × 문제 유형
+                  </h3>
+                  <p className="mt-1 text-xs text-neutral-500">
+                    부정 리뷰 기준. 숫자는 건수, 하단은 전체 부정 대비 비율입니다.
+                  </p>
+                </div>
+                <div className="text-xs text-neutral-400">
+                  진할수록 높음
+                </div>
+              </div>
+              <div className="overflow-x-auto p-3">
+                <table className="w-full min-w-[760px] border-separate border-spacing-1 text-sm">
+                  <thead>
+                    <tr>
+                      <th className="w-36 px-2 py-2 text-left text-xs font-medium text-neutral-500">
+                        여정
+                      </th>
+                      {shownProblemTypes.map((l1) => (
+                        <th
+                          key={l1}
+                          className="px-2 py-2 text-center text-xs font-medium text-neutral-500"
+                        >
+                          {l1}
+                        </th>
+                      ))}
+                      <th className="px-2 py-2 text-center text-xs font-medium text-red-500">
+                        여정별 부정 합계
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {JOURNEY_STAGES.filter((j) => j !== "_미상").map((journey) => {
+                      const journeyMeta = journeys.find(
+                        (j) => j.journey === journey,
+                      );
+                      const rowTotal = shownProblemTypes.reduce(
+                        (sum, l1) => sum + pivot.neg[journey][l1],
+                        0,
+                      );
+                      return (
+                        <tr key={journey}>
+                          <th className="px-2 py-2 text-left align-middle">
+                            <div className="font-medium text-neutral-800">
+                              {journey}
+                            </div>
+                            <div className="text-[11px] text-neutral-400">
+                              부정 {journeyMeta?.totalNeg ?? 0}
+                            </div>
+                          </th>
+                          {shownProblemTypes.map((l1) => {
+                            const count = pivot.neg[journey][l1];
+                            const total = count + pivot.pos[journey][l1];
+                            const isSelected =
+                              selectedCell?.journey === journey &&
+                              selectedCell?.l1 === l1;
+                            return (
+                              <td key={l1} className="p-0.5">
+                                <button
+                                  type="button"
+                                  disabled={total === 0}
+                                  onClick={() => {
+                                    setSelectedCell(
+                                      isSelected ? null : { journey, l1 },
+                                    );
+                                    setActiveJourney(journey);
+                                  }}
+                                  className={`h-14 w-full rounded px-2 text-center transition ${heatClass(
+                                    count,
+                                    pivot.max,
+                                    isSelected,
+                                  )} ${
+                                    total > 0
+                                      ? "cursor-pointer hover:scale-[1.02]"
+                                      : "cursor-default"
+                                  }`}
+                                >
+                                  <div className="text-base font-semibold tabular-nums">
+                                    {count}
+                                  </div>
+                                  <div className="text-[11px] opacity-70">
+                                    {pct(count, stats.negative)}
+                                  </div>
+                                </button>
+                              </td>
+                            );
+                          })}
+                          <td className="p-0.5">
+                            <div className="h-14 rounded bg-red-50 px-2 py-1 text-center text-red-500">
+                              <div className="text-base font-semibold tabular-nums">
+                                {rowTotal.toLocaleString()}
+                              </div>
+                              <div className="text-[11px]">
+                                {pct(rowTotal, stats.negative)}
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <TopTaskList
+              priorities={priorities}
+              activeRank={activeRank}
+              onSelect={setActiveRank}
+            />
+          </section>
+
+          <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_20rem]">
+            <SelectedTaskPanel insight={activeInsight} />
+            <DataQualityPanel
+              stats={stats}
+              period={period}
+            />
+          </section>
+
+          <JourneyDetailSection
+            journeys={journeys}
+            activeJourney={activeJourney}
+            reviews={reviews}
+            onSelectJourney={setActiveJourney}
+            onSelectCell={setSelectedCell}
+          />
+        </div>
+      </div>
     </article>
   );
 }
