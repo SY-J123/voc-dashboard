@@ -12,9 +12,11 @@ import {
 
 import {
   buildPivot,
+  computeInsights,
   extractInsights,
   extractJourneyInsights,
   L2_COLORS,
+  type Insight,
   type JourneyInsight,
   type ProblemInsight,
 } from "../../lib/analytics";
@@ -353,58 +355,214 @@ function DonutTooltip({
 
 type L2Slice = { name: string; value: number; l1: string };
 
-function AppSidebar() {
-  const items = [
-    "요약",
-    "여정 분석",
-    "문제 유형",
-    "리뷰 탐색",
-    "검수 필요",
-    "인사이트",
-    "리포트",
-  ];
+type CellDetail = {
+  total: number;
+  l2Rows: { l2: string; count: number }[];
+  keywords: { keyword: string; count: number }[];
+  reviews: ClassifiedReview[];
+};
+
+function HeatmapCellDetail({
+  selectedCell,
+  detail,
+  totalNeg,
+  onClose,
+}: {
+  selectedCell: SelectedCell;
+  detail: CellDetail | null;
+  totalNeg: number;
+  onClose: () => void;
+}) {
+  const [randIdx, setRandIdx] = useState(0);
+
+  useEffect(() => {
+    setRandIdx(0);
+  }, [selectedCell?.journey, selectedCell?.l1]);
+
+  if (!selectedCell || !detail) {
+    return (
+      <section className="flex h-full flex-col rounded-lg border border-dashed border-neutral-300 bg-white p-5">
+        <div className="text-xs font-medium text-neutral-500">
+          히트맵 셀 상세
+        </div>
+        <div className="mt-2 text-base font-semibold text-neutral-900">
+          셀을 선택하세요
+        </div>
+        <p className="mt-2 text-sm leading-relaxed text-neutral-500">
+          왼쪽 히트맵에서 셀을 클릭하면 해당 영역의 L2 분포, 주요 키워드,
+          대표 부정 리뷰가 여기에 표시됩니다.
+        </p>
+      </section>
+    );
+  }
+
+  const { l2Rows, keywords, reviews, total } = detail;
+  const sharePct = totalNeg > 0 ? (total / totalNeg) * 100 : 0;
+  const l2Max = l2Rows[0]?.count ?? 1;
+  const review = reviews.length > 0 ? reviews[randIdx % reviews.length] : null;
+
+  const pickAnother = () => {
+    if (reviews.length <= 1) return;
+    let next = randIdx;
+    let attempts = 0;
+    while (next === randIdx && attempts < 8) {
+      next = Math.floor(Math.random() * reviews.length);
+      attempts += 1;
+    }
+    setRandIdx(next);
+  };
 
   return (
-    <aside className="hidden xl:flex min-h-[calc(100vh-9rem)] flex-col justify-between border-r border-neutral-200 bg-white px-3 py-4">
-      <div>
-        <div className="mb-5 flex items-center gap-2 px-2">
-          <div className="h-7 w-7 rounded-lg bg-blue-600" />
-          <div>
-            <div className="text-sm font-semibold text-neutral-950">
-              토스 VOC
-            </div>
-            <div className="text-[11px] text-neutral-400">analysis</div>
+    <section className="flex h-full flex-col rounded-lg border border-neutral-200 bg-white p-4">
+      <div className="flex items-start justify-between gap-2 border-b border-neutral-100 pb-3">
+        <div className="min-w-0">
+          <div className="text-xs font-medium text-neutral-500">
+            히트맵 셀 상세
+          </div>
+          <h3 className="mt-1 truncate text-base font-semibold leading-snug">
+            {selectedCell.journey}
+            <span className="mx-1 text-neutral-300">·</span>
+            {selectedCell.l1}
+          </h3>
+          <div className="mt-1 text-[11px] text-neutral-500">
+            부정 {total}건 · 전체 부정의 {sharePct.toFixed(1)}%
           </div>
         </div>
-        <nav className="space-y-1">
-          {items.map((item, idx) => (
-            <button
-              key={item}
-              type="button"
-              className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors ${
-                idx === 0
-                  ? "bg-blue-50 font-medium text-blue-700"
-                  : "text-neutral-600 hover:bg-neutral-50"
-              }`}
-            >
-              <span
-                className={`h-2 w-2 rounded-full ${
-                  idx === 0 ? "bg-blue-600" : "bg-neutral-300"
-                }`}
-              />
-              {item}
-            </button>
-          ))}
-        </nav>
+        <button
+          type="button"
+          onClick={onClose}
+          className="rounded-md border border-neutral-200 px-2 py-1 text-[11px] text-neutral-500 hover:border-neutral-400"
+        >
+          닫기
+        </button>
       </div>
-      <button
-        type="button"
-        className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-neutral-600 hover:bg-neutral-50"
-      >
-        <span className="h-2 w-2 rounded-full bg-neutral-300" />
-        설정
-      </button>
-    </aside>
+
+      <div className="mt-3">
+        <div className="mb-2 text-[11px] font-medium text-neutral-500">
+          L2 분포
+        </div>
+        {l2Rows.length === 0 ? (
+          <div className="rounded-md bg-neutral-50 p-2.5 text-[11px] text-neutral-400">
+            집계된 L2 없음
+          </div>
+        ) : (
+          <div className="space-y-1.5">
+            {l2Rows.map((row) => {
+              const ratio = total > 0 ? (row.count / total) * 100 : 0;
+              return (
+                <div
+                  key={row.l2}
+                  className="grid grid-cols-[1fr_3.5rem] items-center gap-2 text-[11px]"
+                >
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span
+                        className="inline-block h-2 w-2 flex-shrink-0 rounded-sm"
+                        style={{
+                          background: L2_COLORS[row.l2] ?? "#a3a3a3",
+                        }}
+                      />
+                      <span
+                        className="truncate text-neutral-700"
+                        title={row.l2}
+                      >
+                        {row.l2}
+                      </span>
+                    </div>
+                    <div className="mt-1 h-1.5 rounded-full bg-neutral-100">
+                      <div
+                        className="h-full rounded-full"
+                        style={{
+                          width: `${Math.max(4, (row.count / l2Max) * 100)}%`,
+                          background: L2_COLORS[row.l2] ?? "#a3a3a3",
+                        }}
+                      />
+                    </div>
+                  </div>
+                  <div className="text-right tabular-nums text-neutral-500">
+                    {row.count}
+                    <span className="ml-1 text-neutral-400">
+                      {ratio.toFixed(0)}%
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      <div className="mt-3">
+        <div className="mb-2 text-[11px] font-medium text-neutral-500">
+          주요 키워드
+        </div>
+        {keywords.length === 0 ? (
+          <div className="rounded-md bg-neutral-50 p-2.5 text-[11px] text-neutral-400">
+            추출된 키워드 없음
+          </div>
+        ) : (
+          <div className="flex flex-wrap gap-1">
+            {keywords.map((k) => (
+              <span
+                key={k.keyword}
+                className="rounded bg-neutral-100 px-1.5 py-0.5 text-[11px] text-neutral-700"
+              >
+                {k.keyword}{" "}
+                <span className="tabular-nums text-neutral-400">{k.count}</span>
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="mt-3 flex min-h-0 flex-1 flex-col">
+        <div className="mb-2 flex items-baseline justify-between text-[11px]">
+          <span className="font-medium text-neutral-500">대표 부정 리뷰</span>
+          {reviews.length > 1 && (
+            <button
+              type="button"
+              onClick={pickAnother}
+              className="text-neutral-500 hover:text-neutral-900"
+            >
+              ↻ 다른 리뷰 불러오기
+            </button>
+          )}
+        </div>
+        {!review ? (
+          <div className="rounded-md bg-neutral-50 p-2.5 text-[11px] text-neutral-400">
+            표시할 리뷰가 없습니다.
+          </div>
+        ) : (
+          <div className="flex-1 overflow-y-auto rounded-md border border-neutral-100 bg-neutral-50 p-3">
+            <div className="mb-1.5 flex flex-wrap items-center gap-1.5 text-[10px] text-neutral-400">
+              <span>★{review.rating}</span>
+              <span>·</span>
+              <span
+                className="rounded px-1 py-0.5"
+                style={{
+                  background: `${L2_COLORS[review.problem_type_l2] ?? "#e5e5e5"}33`,
+                  color: "#525252",
+                }}
+              >
+                {review.problem_type_l2}
+              </span>
+              {review.thumbs_up > 0 && (
+                <>
+                  <span>·</span>
+                  <span>좋아요 {review.thumbs_up}</span>
+                </>
+              )}
+              <span className="ml-auto tabular-nums text-neutral-300">
+                {(randIdx % reviews.length) + 1} / {reviews.length}
+              </span>
+            </div>
+            <div className="text-xs leading-relaxed text-neutral-700">
+              {review.cleaned_text}
+            </div>
+          </div>
+        )}
+      </div>
+    </section>
   );
 }
 
@@ -586,6 +744,68 @@ function SelectedTaskPanel({ insight }: { insight: ProblemInsight | undefined })
   );
 }
 
+function InsightsSection({ insights }: { insights: Insight[] }) {
+  if (insights.length === 0) return null;
+
+  const tone: Record<
+    Insight["kind"],
+    { border: string; bg: string; label: string; labelText: string }
+  > = {
+    weakness: {
+      border: "border-red-200",
+      bg: "bg-red-50",
+      label: "약점",
+      labelText: "text-red-700",
+    },
+    strength: {
+      border: "border-emerald-200",
+      bg: "bg-emerald-50",
+      label: "강점",
+      labelText: "text-emerald-700",
+    },
+    ambiguous: {
+      border: "border-amber-200",
+      bg: "bg-amber-50",
+      label: "모호",
+      labelText: "text-amber-700",
+    },
+  };
+
+  return (
+    <section className="rounded-lg border border-neutral-200 bg-white p-4">
+      <div className="mb-3">
+        <h3 className="text-base font-semibold tracking-tight">인사이트</h3>
+        <p className="mt-1 text-xs text-neutral-500">
+          이번 데이터에서 도출한 약점·강점·모호 영역
+        </p>
+      </div>
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        {insights.map((ins, idx) => {
+          const t = tone[ins.kind];
+          return (
+            <div
+              key={`${ins.kind}-${idx}`}
+              className={`rounded-lg border ${t.border} ${t.bg} p-4`}
+            >
+              <div
+                className={`text-[11px] font-semibold uppercase tracking-wide ${t.labelText}`}
+              >
+                {t.label}
+              </div>
+              <div className="mt-1.5 text-sm font-semibold leading-snug text-neutral-900">
+                {ins.headline}
+              </div>
+              <div className="mt-1 text-xs leading-relaxed text-neutral-600">
+                {ins.detail}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 function DataQualityPanel({
   stats,
   period,
@@ -594,7 +814,7 @@ function DataQualityPanel({
   period: string;
 }) {
   return (
-    <aside className="space-y-3">
+    <div className="grid gap-3 md:grid-cols-3">
       <section className="rounded-lg border border-neutral-200 bg-white p-4">
         <div className="mb-3 text-sm font-semibold tracking-tight">
           데이터 신뢰도
@@ -630,7 +850,7 @@ function DataQualityPanel({
           </div>
         </dl>
       </section>
-    </aside>
+    </div>
   );
 }
 
@@ -1079,6 +1299,7 @@ export default function DecisionDashboardClient({
   const pivot = useMemo(() => buildPivot(reviews), [reviews]);
   const priorities = useMemo(() => extractInsights(reviews, 6), [reviews]);
   const journeys = useMemo(() => extractJourneyInsights(reviews), [reviews]);
+  const insights = useMemo(() => computeInsights(reviews), [reviews]);
 
   const stats = useMemo(() => {
     const negative = reviews.filter((r) => r.sentiment_label === "부정").length;
@@ -1097,21 +1318,37 @@ export default function DecisionDashboardClient({
     };
   }, [reviews, priorities]);
 
-  const selectedReviews = useMemo(() => {
-    if (!selectedCell) return [];
-    return reviews
-      .filter(
-        (r) =>
-          r.journey_stage === selectedCell.journey &&
-          r.problem_type_l1 === selectedCell.l1 &&
-          r.sentiment_label === "부정",
-      )
-      .sort(
-        (a, b) =>
-          b.thumbs_up - a.thumbs_up ||
-          (b.problem_type_confidence ?? 0) - (a.problem_type_confidence ?? 0),
-      )
-      .slice(0, 5);
+  const cellDetail = useMemo<CellDetail | null>(() => {
+    if (!selectedCell) return null;
+    const items = reviews.filter(
+      (r) =>
+        r.journey_stage === selectedCell.journey &&
+        r.problem_type_l1 === selectedCell.l1 &&
+        r.sentiment_label === "부정",
+    );
+    const sorted = [...items].sort(
+      (a, b) =>
+        b.thumbs_up - a.thumbs_up ||
+        (b.problem_type_confidence ?? 0) - (a.problem_type_confidence ?? 0),
+    );
+    const l2Counts = new Map<string, number>();
+    const kwMap = new Map<string, number>();
+    for (const r of items) {
+      l2Counts.set(
+        r.problem_type_l2,
+        (l2Counts.get(r.problem_type_l2) ?? 0) + 1,
+      );
+      for (const k of r.problem_keywords ?? [])
+        kwMap.set(k, (kwMap.get(k) ?? 0) + 1);
+    }
+    const l2Rows = [...l2Counts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([l2, count]) => ({ l2, count }));
+    const keywords = [...kwMap.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 8)
+      .map(([keyword, count]) => ({ keyword, count }));
+    return { total: items.length, l2Rows, keywords, reviews: sorted };
   }, [reviews, selectedCell]);
 
   const activeInsight = priorities[activeRank] ?? priorities[0];
@@ -1126,9 +1363,7 @@ export default function DecisionDashboardClient({
 
   return (
     <article className="-mx-6 -my-8 bg-neutral-50">
-      <div className="grid min-h-[calc(100vh-8rem)] xl:grid-cols-[13rem_minmax(0,1fr)]">
-        <AppSidebar />
-
+      <div className="min-h-[calc(100vh-8rem)]">
         <div className="space-y-4 p-5">
           <section className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-3">
@@ -1186,18 +1421,10 @@ export default function DecisionDashboardClient({
 
           <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_26rem]">
             <div className="rounded-lg border border-neutral-200 bg-white">
-              <div className="flex flex-wrap items-end justify-between gap-3 border-b border-neutral-100 px-4 py-3">
-                <div>
-                  <h3 className="text-base font-semibold tracking-tight">
-                    여정 × 문제 유형
-                  </h3>
-                  <p className="mt-1 text-xs text-neutral-500">
-                    부정 리뷰 기준. 숫자는 건수, 하단은 전체 부정 대비 비율입니다.
-                  </p>
-                </div>
-                <div className="text-xs text-neutral-400">
-                  진할수록 높음
-                </div>
+              <div className="border-b border-neutral-100 px-4 py-3">
+                <h3 className="text-base font-semibold tracking-tight">
+                  여정별 문제 분포
+                </h3>
               </div>
               <div className="overflow-x-auto p-3">
                 <table className="w-full min-w-[760px] border-separate border-spacing-1 text-sm">
@@ -1293,19 +1520,21 @@ export default function DecisionDashboardClient({
               </div>
             </div>
 
+            <HeatmapCellDetail
+              selectedCell={selectedCell}
+              detail={cellDetail}
+              totalNeg={stats.negative}
+              onClose={() => setSelectedCell(null)}
+            />
+          </section>
+
+          <section className="grid gap-4 xl:grid-cols-[22rem_minmax(0,1fr)]">
             <TopTaskList
               priorities={priorities}
               activeRank={activeRank}
               onSelect={setActiveRank}
             />
-          </section>
-
-          <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_20rem]">
             <SelectedTaskPanel insight={activeInsight} />
-            <DataQualityPanel
-              stats={stats}
-              period={period}
-            />
           </section>
 
           <JourneyDetailSection
@@ -1315,6 +1544,10 @@ export default function DecisionDashboardClient({
             onSelectJourney={setActiveJourney}
             onSelectCell={setSelectedCell}
           />
+
+          <InsightsSection insights={insights} />
+
+          <DataQualityPanel stats={stats} period={period} />
         </div>
       </div>
     </article>
