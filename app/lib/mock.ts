@@ -1,18 +1,10 @@
 import {
   JOURNEY_STAGES,
+  L2_BY_L1,
   PROBLEM_TYPES_L1,
   type ClassifiedReview,
   type Sentiment,
 } from "./types";
-
-const L2_BY_L1: Record<string, string[]> = {
-  "UI·안내": ["화면 혼란/어포던스", "피드백 부재", "안내·메시지 부족"],
-  "기능·성능": ["기능 오류", "성능·안정성", "업데이트 회귀"],
-  "인증·보안": ["인증 실패", "절차·빈도 과다"],
-  "정책·CS": ["광고·알림 과다", "수수료·한도", "CS 불만"],
-  긍정: ["만족·칭찬"],
-  _미분류: ["_근거부족·다중가설"],
-};
 
 const SAMPLE_TEXTS: Record<string, string[]> = {
   "화면 혼란/어포던스": [
