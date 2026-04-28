@@ -214,10 +214,10 @@ export default function HomePage() {
         </ul>
         <p className="pt-2">
           <Link
-            href="/dashboard"
+            href="/dashboard/decision"
             className="inline-block px-4 py-2 rounded-md bg-neutral-900 text-white text-sm hover:bg-neutral-700"
           >
-            분석 결과 보기 →
+            대시보드 보기 →
           </Link>
         </p>
       </Section>

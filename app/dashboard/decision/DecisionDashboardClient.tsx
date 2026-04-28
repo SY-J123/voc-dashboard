@@ -32,6 +32,22 @@ const shownProblemTypes = PROBLEM_TYPES_L1.filter(
   (l1) => l1 !== "긍정" && l1 !== "_미분류",
 );
 
+const JOURNEY_SHORT: Record<string, string> = {
+  "가입·로그인": "가입/로그인",
+  "송금·이체": "송금",
+  "결제": "결제",
+  "금융상품": "금융상품",
+  "프로모션·이벤트": "프로모션",
+  "앱 전반·CS": "앱 전반",
+  "_미상": "전반",
+};
+
+function taskTitle(insight: ProblemInsight): string {
+  const journey = insight.topJourneys[0]?.journey;
+  const short = journey ? JOURNEY_SHORT[journey] ?? journey : "전반";
+  return `${short} ${insight.l2}`;
+}
+
 function pct(value: number, total: number) {
   if (total === 0) return "0%";
   return `${((value / total) * 100).toFixed(1)}%`;
@@ -618,10 +634,10 @@ function TopTaskList({
                 </div>
                 <div className="min-w-0">
                   <div className="truncate text-sm font-semibold text-neutral-900">
-                    {item.l2}
+                    {taskTitle(item)}
                   </div>
                   <div className="truncate text-[11px] text-neutral-400">
-                    {item.topJourneys[0]?.journey ?? "-"} &gt; {item.l1}
+                    {item.l1}
                   </div>
                 </div>
                 <div className="text-right text-xs tabular-nums text-neutral-500">
@@ -644,101 +660,170 @@ function TopTaskList({
   );
 }
 
-function SelectedTaskPanel({ insight }: { insight: ProblemInsight | undefined }) {
+function SelectedTaskPanel({
+  insight,
+  reviews,
+}: {
+  insight: ProblemInsight | undefined;
+  reviews: ClassifiedReview[];
+}) {
   if (!insight) return null;
-  const review = insight.representatives[0];
+  const journey = insight.topJourneys[0]?.journey;
+  if (!journey) return null;
+
+  const cellReviews = reviews
+    .filter(
+      (r) =>
+        r.journey_stage === journey &&
+        r.problem_type_l2 === insight.l2 &&
+        r.sentiment_label === "부정",
+    )
+    .sort(
+      (a, b) =>
+        b.thumbs_up - a.thumbs_up ||
+        b.cleaned_text.length - a.cleaned_text.length,
+    );
+
+  const journeyNegTotal = reviews.filter(
+    (r) => r.journey_stage === journey && r.sentiment_label === "부정",
+  ).length;
+  const totalNeg = reviews.filter((r) => r.sentiment_label === "부정").length;
+
+  const cellCount = cellReviews.length;
+  const journeyShare = journeyNegTotal > 0 ? (cellCount / journeyNegTotal) * 100 : 0;
+  const totalShare = totalNeg > 0 ? (cellCount / totalNeg) * 100 : 0;
+
+  const kwMap = new Map<string, number>();
+  const emMap = new Map<string, number>();
+  for (const r of cellReviews) {
+    for (const k of r.problem_keywords ?? [])
+      kwMap.set(k, (kwMap.get(k) ?? 0) + 1);
+    for (const k of r.emotion_keywords ?? [])
+      emMap.set(k, (emMap.get(k) ?? 0) + 1);
+  }
+  const problemKeywords = [...kwMap.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 6)
+    .map(([k]) => k);
+  const emotionKeywords = [...emMap.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([k]) => k);
+
+  const reps = cellReviews.slice(0, 3);
 
   return (
-    <section className="rounded-lg border border-neutral-200 bg-white p-4">
-      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <div className="flex items-center gap-2">
-            <h3 className="text-lg font-semibold tracking-tight">
-              선택한 과제 상세
-            </h3>
-            <span className="rounded bg-red-50 px-1.5 py-0.5 text-[11px] font-medium text-red-600">
-              최우선
+    <section className="rounded-lg border border-neutral-200 bg-white p-5">
+      <div className="border-b border-neutral-100 pb-4">
+        <div className="text-xs font-medium text-neutral-500">
+          선택한 과제 상세
+        </div>
+        <h3 className="mt-1 text-xl font-semibold tracking-tight text-neutral-950">
+          {journey} · {insight.l2}
+        </h3>
+        <p className="mt-2 text-sm leading-relaxed text-neutral-700">
+          {journey} 여정의 부정 리뷰 중 {insight.l2}가 가장 많이 반복됩니다.
+        </p>
+        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-neutral-500">
+          <span className="tabular-nums">
+            부정{" "}
+            <span className="font-semibold text-neutral-900">
+              {cellCount.toLocaleString()}건
             </span>
-          </div>
-          <div className="mt-2 flex flex-wrap items-baseline gap-2">
-            <div className="text-xl font-semibold text-neutral-950">
-              {insight.l2}
-            </div>
-            <div className="text-xs text-neutral-400">
-              {insight.topJourneys[0]?.journey ?? "-"} &gt; {insight.l1}
-            </div>
-          </div>
-          <p className="mt-1 text-xs text-neutral-500">
-            부정 리뷰 {insight.negCount.toLocaleString()}건 · 전체 부정의{" "}
-            {insight.pctOfAll.toFixed(1)}%
-          </p>
+          </span>
+          <span className="text-neutral-300">·</span>
+          <span className="tabular-nums">
+            해당 여정 내{" "}
+            <span className="font-semibold text-neutral-900">
+              {journeyShare.toFixed(1)}%
+            </span>
+          </span>
+          <span className="text-neutral-300">·</span>
+          <span className="tabular-nums">
+            전체 부정의{" "}
+            <span className="font-semibold text-neutral-900">
+              {totalShare.toFixed(1)}%
+            </span>
+          </span>
+          <span className="text-neutral-300">·</span>
+          <span>
+            상위 분류 <span className="text-neutral-700">{insight.l1}</span>
+          </span>
         </div>
       </div>
 
-      <div className="grid gap-3 lg:grid-cols-[1fr_0.9fr_1.5fr_1fr]">
-        <div className="rounded-lg border border-neutral-100 bg-neutral-50 p-3">
-          <div className="mb-2 text-xs font-medium text-neutral-500">
-            주요 키워드
-          </div>
-          <KeywordBars keywords={insight.topKeywords} />
+      <dl className="mt-4 space-y-2 text-sm">
+        <div className="grid grid-cols-[6.5rem_1fr] gap-3">
+          <dt className="text-xs font-medium text-neutral-500 pt-0.5">
+            문제 키워드
+          </dt>
+          <dd className="text-neutral-800">
+            {problemKeywords.length > 0 ? problemKeywords.join(", ") : "—"}
+          </dd>
         </div>
-        <div className="rounded-lg border border-neutral-100 bg-neutral-50 p-3">
-          <div className="mb-2 text-xs font-medium text-neutral-500">
+        <div className="grid grid-cols-[6.5rem_1fr] gap-3">
+          <dt className="text-xs font-medium text-neutral-500 pt-0.5">
             감정 키워드
+          </dt>
+          <dd className="text-neutral-800">
+            {emotionKeywords.length > 0 ? emotionKeywords.join(", ") : "—"}
+          </dd>
+        </div>
+      </dl>
+
+      <div className="mt-5">
+        <div className="mb-2 text-xs font-medium text-neutral-500">
+          대표 리뷰
+        </div>
+        {reps.length === 0 ? (
+          <div className="rounded-md bg-neutral-50 p-3 text-xs text-neutral-400">
+            표시할 리뷰가 없습니다.
           </div>
-          <div className="space-y-1.5">
-            {insight.topEmotions.slice(0, 5).map((emotion) => (
+        ) : (
+          <div className="space-y-2">
+            {reps.map((r) => (
               <div
-                key={emotion.keyword}
-                className="flex items-center justify-between rounded bg-red-50 px-2 py-1 text-xs"
+                key={r.review_id}
+                className="rounded-md border border-neutral-100 bg-neutral-50 p-3"
               >
-                <span className="font-medium text-red-700">
-                  {emotion.keyword}
-                </span>
-                <span className="tabular-nums text-red-400">
-                  {emotion.count}
-                </span>
+                <div className="mb-1 flex flex-wrap items-center gap-1.5 text-[10px] text-neutral-400">
+                  <span>★{r.rating}</span>
+                  {r.thumbs_up > 0 && (
+                    <>
+                      <span>·</span>
+                      <span>좋아요 {r.thumbs_up}</span>
+                    </>
+                  )}
+                </div>
+                <div className="text-sm leading-relaxed text-neutral-700">
+                  {r.cleaned_text}
+                </div>
               </div>
             ))}
           </div>
-        </div>
-        <div className="rounded-lg border border-neutral-100 bg-white p-3">
-          <div className="mb-2 text-xs font-medium text-neutral-500">
-            대표 리뷰
+        )}
+      </div>
+
+      <div className="mt-5 rounded-lg border border-amber-200 bg-amber-50 p-4">
+        <div className="text-xs font-medium text-amber-900">추천 액션</div>
+        <dl className="mt-2 space-y-1.5 text-sm">
+          <div className="grid grid-cols-[7rem_1fr] gap-3">
+            <dt className="text-xs text-amber-800 pt-0.5">담당 팀</dt>
+            <dd className="font-medium text-neutral-900">
+              {insight.action.team}
+            </dd>
           </div>
-          {review && (
-            <blockquote className="text-sm leading-relaxed text-neutral-700">
-              <div className="mb-1 text-xs text-neutral-400">
-                ★{review.rating} · 좋아요 {review.thumbs_up}
-              </div>
-              {review.text.length > 210
-                ? `${review.text.slice(0, 210).trimEnd()}...`
-                : review.text}
-            </blockquote>
-          )}
-        </div>
-        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
-          <div className="mb-2 flex items-center justify-between">
-            <div className="text-xs font-medium text-amber-900">추천 액션</div>
-            <span className="rounded bg-red-500 px-1.5 py-0.5 text-[11px] font-semibold text-white">
-              P1
-            </span>
+          <div className="grid grid-cols-[7rem_1fr] gap-3">
+            <dt className="text-xs text-amber-800 pt-0.5">개선 방향</dt>
+            <dd className="text-neutral-800">{insight.action.suggestion}</dd>
           </div>
-          <div className="space-y-2 text-xs leading-relaxed">
-            <div>
-              <div className="text-amber-800">담당</div>
-              <div className="font-medium text-neutral-900">
-                {insight.action.team}
-              </div>
-            </div>
-            <div>
-              <div className="text-amber-800">액션</div>
-              <div className="font-medium text-neutral-900">
-                {insight.action.suggestion}
-              </div>
-            </div>
+          <div className="grid grid-cols-[7rem_1fr] gap-3">
+            <dt className="text-xs text-amber-800 pt-0.5">
+              우선 확인할 로그/화면
+            </dt>
+            <dd className="text-neutral-800">{insight.action.inspect}</dd>
           </div>
-        </div>
+        </dl>
       </div>
     </section>
   );
@@ -1534,7 +1619,7 @@ export default function DecisionDashboardClient({
               activeRank={activeRank}
               onSelect={setActiveRank}
             />
-            <SelectedTaskPanel insight={activeInsight} />
+            <SelectedTaskPanel insight={activeInsight} reviews={reviews} />
           </section>
 
           <JourneyDetailSection

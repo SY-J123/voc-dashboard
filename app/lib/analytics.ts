@@ -2,36 +2,7 @@ import {
   JOURNEY_STAGES,
   PROBLEM_TYPES_L1,
   type ClassifiedReview,
-  type Sentiment,
 } from "./types";
-
-export type FilterState = {
-  query: string;
-  sentiments: Set<Sentiment>;
-  ratings: Set<number>;
-  minConfidence: number;
-};
-
-export const DEFAULT_FILTER: FilterState = {
-  query: "",
-  sentiments: new Set<Sentiment>(["긍정", "부정", "중립"]),
-  ratings: new Set<number>([1, 2, 3, 4, 5]),
-  minConfidence: 0,
-};
-
-export function applyFilter(
-  reviews: ClassifiedReview[],
-  filter: FilterState,
-): ClassifiedReview[] {
-  const q = filter.query.trim().toLowerCase();
-  return reviews.filter((r) => {
-    if (!filter.sentiments.has(r.sentiment_label)) return false;
-    if (!filter.ratings.has(r.rating)) return false;
-    if ((r.problem_type_confidence ?? 0) < filter.minConfidence) return false;
-    if (q && !r.cleaned_text.toLowerCase().includes(q)) return false;
-    return true;
-  });
-}
 
 export type PivotCounts = Record<string, Record<string, number>>;
 
@@ -65,37 +36,6 @@ export function buildPivot(reviews: ClassifiedReview[]) {
     for (const l1 of PROBLEM_TYPES_L1)
       if (neg[j][l1] > max) max = neg[j][l1];
   return { neg, pos, max };
-}
-
-export type L2Row = {
-  l1: string;
-  l2: string;
-  neg: number;
-  pos: number;
-  neutral: number;
-  total: number;
-};
-
-export function buildL2Ranking(reviews: ClassifiedReview[]): L2Row[] {
-  const counts = new Map<string, L2Row>();
-  for (const r of reviews) {
-    const key = `${r.problem_type_l1}|${r.problem_type_l2}`;
-    if (!counts.has(key))
-      counts.set(key, {
-        l1: r.problem_type_l1,
-        l2: r.problem_type_l2,
-        neg: 0,
-        pos: 0,
-        neutral: 0,
-        total: 0,
-      });
-    const slot = counts.get(key)!;
-    slot.total += 1;
-    if (r.sentiment_label === "부정") slot.neg += 1;
-    else if (r.sentiment_label === "긍정") slot.pos += 1;
-    else slot.neutral += 1;
-  }
-  return [...counts.values()].sort((a, b) => b.neg - a.neg);
 }
 
 export type Insight = {
@@ -176,61 +116,80 @@ export type ProblemInsight = {
     rating: number;
     thumbs_up: number;
   }[];
-  action: { team: string; suggestion: string };
+  action: ActionInfo;
 };
 
-const ACTION_MAP: Record<string, { team: string; suggestion: string }> = {
+export type ActionInfo = {
+  team: string;
+  suggestion: string;
+  inspect: string;
+};
+
+export const ACTION_MAP: Record<string, ActionInfo> = {
   "광고·알림 과다": {
     team: "PM · 디자인",
     suggestion: "알림 설정 UI 세분화, 광고 노출 정책·빈도 재검토",
+    inspect: "푸시 발송 빈도 데이터, 알림 카테고리 분포, 알림 설정 화면",
   },
   "기능 오류": {
     team: "엔지니어링 · QA",
     suggestion: "오류 패턴 분류, 회귀 테스트 강화, 에러 추적 보강",
+    inspect: "에러 추적 로그, 재현 시나리오, 실패 시점 스택트레이스",
   },
   "화면 혼란/어포던스": {
     team: "디자인 · UX 리서치",
     suggestion: "정보 위계 재설계, 사용자 테스트로 어포던스 검증",
+    inspect: "클릭 히트맵, 사용자 테스트 영상, 진입·이탈 퍼널",
   },
   "성능·안정성": {
     team: "엔지니어링",
     suggestion: "성능 프로파일링, 앱 사이즈·메모리 최적화",
+    inspect: "프로파일러 결과, 메모리·CPU 그래프, 크래시 리포트",
   },
   "업데이트 회귀": {
     team: "QA · 릴리즈",
     suggestion: "릴리즈 전 회귀 테스트 자동화, 점진적 배포 도입",
+    inspect: "릴리즈 노트, 버전별 크래시율, 회귀 테스트 결과",
   },
   "인증 실패": {
     team: "보안 · QA",
     suggestion: "지문/OTP 폴백 플로우 안정화, 실패 케이스 추적",
+    inspect: "OTP·지문 실패 로그, 인증 플로우 화면, 디바이스별 성공률",
   },
   "절차·빈도 과다": {
     team: "PM · 보안",
     suggestion: "인증 빈도/단계 정책 재검토, 마찰 측정 도입",
+    inspect: "인증 단계 분기 정의, 빈도 정책 문서, 사용자 마찰 측정",
   },
   "안내·메시지 부족": {
     team: "콘텐츠 · 디자인",
     suggestion: "오류 메시지·정책 사전 고지·도움말 카피 보강",
+    inspect: "에러 메시지 사전, 거절·실패 안내 카피, 도움말 페이지",
   },
   "수수료·한도": {
     team: "비즈 · PM",
     suggestion: "정책 재검토 또는 사전 고지·근거 설명 강화",
+    inspect: "수수료 정책 문서, 한도 설정 UI, 사전 안내 화면",
   },
   "CS 불만": {
     team: "CS · UX",
     suggestion: "CS 채널 접근성 개선, 응대 품질 모니터링",
+    inspect: "CS 응대 시간, 채널별 인입량, 미응답 비율",
   },
   "피드백 부재": {
     team: "디자인 · 엔지니어링",
     suggestion: "처리·성공·실패 상태 표시 추가, 로딩 인디케이터 보강",
+    inspect: "각 액션의 처리·완료·실패 화면, 로딩 상태 패턴",
   },
   "만족·칭찬": {
     team: "PM · 마케팅",
     suggestion: "강점 영역 사례 발굴, 마케팅·리포트 활용",
+    inspect: "긍정 리뷰 사례 모음, 외부 리포트 자료",
   },
   "_근거부족·다중가설": {
     team: "리서치",
     suggestion: "정성 인터뷰 후보 / 분류 체계 보완 검토",
+    inspect: "원본 리뷰 검수, 분류 기준 정의서",
   },
 };
 
@@ -306,6 +265,7 @@ export function extractInsights(
       action: ACTION_MAP[l2] ?? {
         team: "PM",
         suggestion: "추가 분석 후 액션 정의 필요",
+        inspect: "원본 리뷰 검수",
       },
     };
   });
@@ -323,7 +283,7 @@ export type JourneyInsight = {
     pctOfJourney: number;
     keywords: { keyword: string; count: number }[];
     emotions: { keyword: string; count: number }[];
-    action: { team: string; suggestion: string };
+    action: ActionInfo;
   } | null;
   secondaryIssues: { l1: string; l2: string; count: number }[];
 };
@@ -395,6 +355,7 @@ export function extractJourneyInsights(
         action: ACTION_MAP[l2] ?? {
           team: "PM",
           suggestion: "추가 분석 후 액션 정의 필요",
+          inspect: "원본 리뷰 검수",
         },
       };
     }
@@ -432,36 +393,3 @@ export const L2_COLORS: Record<string, string> = {
   "_근거부족·다중가설": "#a3a3a3",
 };
 
-export type SentimentRatingCell = {
-  rating: number;
-  sentiment: Sentiment;
-  count: number;
-};
-
-export function buildSentimentRating(reviews: ClassifiedReview[]) {
-  const grid: SentimentRatingCell[] = [];
-  const sentiments: Sentiment[] = ["긍정", "중립", "부정"];
-  for (let r = 5; r >= 1; r--) {
-    for (const s of sentiments) {
-      grid.push({ rating: r, sentiment: s, count: 0 });
-    }
-  }
-  for (const rev of reviews) {
-    const cell = grid.find(
-      (c) => c.rating === rev.rating && c.sentiment === rev.sentiment_label,
-    );
-    if (cell) cell.count += 1;
-  }
-  let agree = 0;
-  let disagree = 0;
-  for (const rev of reviews) {
-    if (rev.rating >= 4 && rev.sentiment_label === "긍정") agree += 1;
-    else if (rev.rating <= 2 && rev.sentiment_label === "부정") agree += 1;
-    else if (rev.rating >= 4 && rev.sentiment_label === "부정") disagree += 1;
-    else if (rev.rating <= 2 && rev.sentiment_label === "긍정") disagree += 1;
-  }
-  const decisive = agree + disagree;
-  const agreementRate = decisive > 0 ? agree / decisive : 0;
-
-  return { grid, agree, disagree, agreementRate, decisive };
-}
