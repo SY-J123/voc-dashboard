@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import MermaidDiagram from "./components/MermaidDiagram";
+import { loadClassifiedReviews } from "./lib/data";
 
 const ANALYSIS_FLOW = `flowchart LR
     Z["1. 분석 기준 수립<br/>여정 / 문제 타입 / 감정 정의"] --> A["2. 리뷰 수집<br/>Google Play 토스 앱 리뷰"]
@@ -162,7 +163,35 @@ function Section({
   );
 }
 
-export default function HomePage() {
+export default async function HomePage() {
+  const reviews = await loadClassifiedReviews();
+  const dates = reviews
+    .map((r) => r.review_date.slice(0, 10))
+    .sort();
+  const startDate = dates[0];
+  const endDate = dates[dates.length - 1];
+  const monthsSpan =
+    (new Date(endDate).getTime() - new Date(startDate).getTime()) /
+    (1000 * 60 * 60 * 24 * 30.44);
+  const totalCount = reviews.length;
+  const needsReview = reviews.filter((r) => r.needs_review).length;
+  const autoClassified = totalCount - needsReview;
+  const reviewPct = ((needsReview / totalCount) * 100).toFixed(1);
+  const fmt = (n: number) => n.toLocaleString("ko-KR");
+
+  const dataSummary: { label: string; value: React.ReactNode }[] = [
+    { label: "출처", value: "Google Play 스토어 토스 앱 리뷰" },
+    {
+      label: "수집 기간",
+      value: `${startDate} ~ ${endDate} (약 ${monthsSpan.toFixed(1)}개월)`,
+    },
+    { label: "수집 건수", value: `${fmt(totalCount)}건` },
+    {
+      label: "자동 분류 / 미분류",
+      value: `${fmt(autoClassified)}건 / ${fmt(needsReview)}건 (검수 대기 ${reviewPct}%)`,
+    },
+  ];
+
   return (
     <article className="mx-auto max-w-4xl space-y-10 break-keep">
       <div className="space-y-2">
@@ -228,10 +257,22 @@ export default function HomePage() {
       </Section>
 
       <Section title="데이터 소개">
-        <ul className="list-disc pl-5 space-y-1">
-          <li>출처: Google Play 스토어 토스 앱 리뷰</li>
-          <li>날짜 범위: {"{시작일} ~ {종료일}"}</li>
-        </ul>
+        <div className="overflow-x-auto">
+          <table className="text-sm border-collapse border border-neutral-200 bg-white">
+            <tbody>
+              {dataSummary.map((row) => (
+                <tr key={row.label}>
+                  <th className="border border-neutral-200 bg-neutral-50 px-3 py-2 text-left font-medium align-top w-44">
+                    {row.label}
+                  </th>
+                  <td className="border border-neutral-200 px-3 py-2 text-black align-top">
+                    {row.value}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </Section>
 
       <Section title="분석 기준">
