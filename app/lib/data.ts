@@ -6,7 +6,6 @@ import type { ClassifiedReview } from "./types";
 
 const DATA_PATH = path.join(
   process.cwd(),
-  "..",
   "data",
   "classified_reviews.json",
 );
