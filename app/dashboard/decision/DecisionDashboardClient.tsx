@@ -4,11 +4,9 @@ import { useEffect, useMemo, useState } from "react";
 
 import {
   buildPivot,
-  computeInsights,
   extractInsights,
   extractJourneyInsights,
   L2_COLORS,
-  type Insight,
   type JourneyInsight,
   type ProblemInsight,
 } from "../../lib/analytics";
@@ -558,8 +556,6 @@ function TopTaskList({
   activeRank: number;
   onSelect: (idx: number) => void;
 }) {
-  const max = priorities[0]?.negCount ?? 1;
-
   return (
     <section className="rounded-lg border border-neutral-200 bg-white p-4">
       <div className="mb-3 flex items-center justify-between">
@@ -569,7 +565,7 @@ function TopTaskList({
           </h3>
           <p className="mt-1 text-xs text-neutral-500">부정 리뷰 기준</p>
         </div>
-        <span className="text-xs text-neutral-400">비율</span>
+        <span className="text-xs text-neutral-400">건수</span>
       </div>
       <div className="space-y-2">
         {priorities.slice(0, 5).map((item, idx) => {
@@ -607,17 +603,12 @@ function TopTaskList({
                     {item.l1}
                   </div>
                 </div>
-                <div className="text-right text-xs tabular-nums text-neutral-500">
-                  {item.pctOfAll.toFixed(1)}%
+                <div className="text-right text-sm font-semibold tabular-nums text-neutral-900">
+                  {item.negCount.toLocaleString()}
+                  <span className="ml-0.5 text-[11px] font-normal text-neutral-400">
+                    건
+                  </span>
                 </div>
-              </div>
-              <div className="mt-2 ml-8 h-1.5 rounded-full bg-neutral-100">
-                <div
-                  className="h-full rounded-full bg-red-500"
-                  style={{
-                    width: `${Math.max(5, (item.negCount / max) * 100)}%`,
-                  }}
-                />
               </div>
             </button>
           );
@@ -796,116 +787,6 @@ function SelectedTaskPanel({
   );
 }
 
-function InsightsSection({ insights }: { insights: Insight[] }) {
-  if (insights.length === 0) return null;
-
-  const tone: Record<
-    Insight["kind"],
-    { border: string; bg: string; label: string; labelText: string }
-  > = {
-    weakness: {
-      border: "border-red-200",
-      bg: "bg-red-50",
-      label: "약점",
-      labelText: "text-red-700",
-    },
-    strength: {
-      border: "border-emerald-200",
-      bg: "bg-emerald-50",
-      label: "강점",
-      labelText: "text-emerald-700",
-    },
-    ambiguous: {
-      border: "border-amber-200",
-      bg: "bg-amber-50",
-      label: "모호",
-      labelText: "text-amber-700",
-    },
-  };
-
-  return (
-    <section className="rounded-lg border border-neutral-200 bg-white p-4">
-      <div className="mb-3">
-        <h3 className="text-base font-semibold tracking-tight">인사이트</h3>
-        <p className="mt-1 text-xs text-neutral-500">
-          이번 데이터에서 도출한 약점·강점·모호 영역
-        </p>
-      </div>
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-        {insights.map((ins, idx) => {
-          const t = tone[ins.kind];
-          return (
-            <div
-              key={`${ins.kind}-${idx}`}
-              className={`rounded-lg border ${t.border} ${t.bg} p-4`}
-            >
-              <div
-                className={`text-[11px] font-semibold uppercase tracking-wide ${t.labelText}`}
-              >
-                {t.label}
-              </div>
-              <div className="mt-1.5 text-sm font-semibold leading-snug text-neutral-900">
-                {ins.headline}
-              </div>
-              <div className="mt-1 text-xs leading-relaxed text-neutral-600">
-                {ins.detail}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </section>
-  );
-}
-
-function DataQualityPanel({
-  stats,
-  period,
-}: {
-  stats: { total: number; negative: number; ambiguous: number };
-  period: string;
-}) {
-  return (
-    <div className="grid gap-3 md:grid-cols-3">
-      <section className="rounded-lg border border-neutral-200 bg-white p-4">
-        <div className="mb-3 text-sm font-semibold tracking-tight">
-          데이터 신뢰도
-        </div>
-        <div className="rounded-lg bg-blue-50 p-3">
-          <div className="text-xs text-blue-700">감정·별점 일치율</div>
-          <div className="mt-1 text-2xl font-semibold text-blue-700">86.7%</div>
-        </div>
-      </section>
-      <section className="rounded-lg border border-neutral-200 bg-white p-4">
-        <div className="text-sm font-semibold tracking-tight">검수 필요 리뷰</div>
-        <div className="mt-2 text-2xl font-semibold text-orange-500 tabular-nums">
-          {stats.ambiguous.toLocaleString()}건
-        </div>
-        <div className="mt-1 text-xs text-neutral-400">
-          전체의 {pct(stats.ambiguous, stats.total)}
-        </div>
-      </section>
-      <section className="rounded-lg border border-neutral-200 bg-white p-4">
-        <div className="text-sm font-semibold tracking-tight">메타 정보</div>
-        <dl className="mt-3 space-y-2 text-xs">
-          <div className="flex justify-between gap-3">
-            <dt className="text-neutral-400">데이터 기간</dt>
-            <dd className="text-right text-neutral-700">{period}</dd>
-          </div>
-          <div className="flex justify-between gap-3">
-            <dt className="text-neutral-400">리뷰 출처</dt>
-            <dd className="text-right text-neutral-700">Google Play</dd>
-          </div>
-          <div className="flex justify-between gap-3">
-            <dt className="text-neutral-400">분석 모델</dt>
-            <dd className="text-right text-neutral-700">Claude Haiku 4.5</dd>
-          </div>
-        </dl>
-      </section>
-    </div>
-  );
-}
-
 export default function DecisionDashboardClient({
   reviews,
 }: {
@@ -917,7 +798,6 @@ export default function DecisionDashboardClient({
   const pivot = useMemo(() => buildPivot(reviews), [reviews]);
   const priorities = useMemo(() => extractInsights(reviews, 6), [reviews]);
   const journeys = useMemo(() => extractJourneyInsights(reviews), [reviews]);
-  const insights = useMemo(() => computeInsights(reviews), [reviews]);
 
   const stats = useMemo(() => {
     const negative = reviews.filter((r) => r.sentiment_label === "부정").length;
@@ -970,48 +850,11 @@ export default function DecisionDashboardClient({
   }, [reviews, selectedCell]);
 
   const activeInsight = priorities[activeRank] ?? priorities[0];
-  const period = useMemo(() => {
-    const dates = reviews
-      .map((review) => review.review_date)
-      .filter(Boolean)
-      .sort();
-    if (dates.length === 0) return "-";
-    return `${dates[0]} ~ ${dates[dates.length - 1]}`;
-  }, [reviews]);
 
   return (
     <article className="-mx-6 -my-8 bg-neutral-50">
       <div className="min-h-[calc(100vh-8rem)]">
         <div className="space-y-4 p-5">
-          <section className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <div className="h-9 w-9 rounded-xl bg-blue-600" />
-              <div>
-                <h2 className="text-2xl font-bold tracking-tight">
-                  토스 VOC 대시보드
-                </h2>
-                <p className="text-xs text-neutral-500">
-                  하단은 선택한 과제의 키워드 / 감정 / 대표 리뷰 / 추천 액션
-                </p>
-              </div>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2">
-              <button className="rounded-md border border-neutral-200 bg-white px-3 py-2 text-xs font-medium text-neutral-700">
-                {period}
-              </button>
-              <button className="rounded-md border border-neutral-200 bg-white px-3 py-2 text-xs font-medium text-neutral-700">
-                전체 앱
-              </button>
-              <button className="rounded-md border border-neutral-200 bg-white px-3 py-2 text-xs font-medium text-neutral-700">
-                필터
-              </button>
-              <div className="text-xs text-neutral-400">
-                데이터 기준: {stats.total.toLocaleString()}건
-              </div>
-            </div>
-          </section>
-
           <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
             <StatCard
               label="전체 리뷰"
@@ -1153,10 +996,6 @@ export default function DecisionDashboardClient({
             />
             <SelectedTaskPanel insight={activeInsight} reviews={reviews} />
           </section>
-
-          <InsightsSection insights={insights} />
-
-          <DataQualityPanel stats={stats} period={period} />
         </div>
       </div>
     </article>

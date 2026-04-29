@@ -164,7 +164,7 @@ function Section({
 
 export default function HomePage() {
   return (
-    <article className="space-y-10 break-keep">
+    <article className="mx-auto max-w-4xl space-y-10 break-keep">
       <div className="space-y-2">
         <h2 className="text-3xl font-bold tracking-tight">
           프로젝트 소개
@@ -482,6 +482,11 @@ export default function HomePage() {
           </li>
           <li>
             본 분석은 스냅샷 기반이므로 시계열 추세 분석은 제공하지 않습니다.
+          </li>
+          <li>
+            본 데모는 비용 문제로 실제 LLM 분류를 매번 수행하지 않고, 미리
+            생성한 정적 분류 결과를 사용합니다. 실제 운영 환경에서는 주기적
+            재분류가 필요합니다.
           </li>
         </ul>
       </Section>
