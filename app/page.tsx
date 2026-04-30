@@ -491,11 +491,133 @@ export default async function HomePage() {
 
         <h3 className="text-base font-semibold text-black pt-2">분류 가이드라인</h3>
         <p>
-          AI에게는 세 분류 기준 각각의 카테고리 정의와 포함·제외 예시를 함께
-          제공합니다. 또한 분류 결과마다 신뢰도 점수와 대안 가설을 함께
-          기록하도록 하며, 신뢰도가 낮은 경우에는 강제로 분류하지 않고
-          미분류 항목으로 표시하도록 안내합니다.
+          AI 분류의 정확도는 모델 성능보다 *어떤 지시를 주는가*에 더 크게
+          좌우됩니다. 본 프로젝트에서는 다음 장치들을 누적 적용해 분류 결과의
+          신뢰도를 끌어올렸습니다.
         </p>
+        <div className="overflow-x-auto">
+          <table className="text-sm border-collapse border border-neutral-200 bg-white">
+            <thead className="bg-neutral-50">
+              <tr>
+                <th className="border border-neutral-200 px-3 py-2 text-left font-medium w-44">
+                  장치
+                </th>
+                <th className="border border-neutral-200 px-3 py-2 text-left font-medium">
+                  목적과 효과
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td className="border border-neutral-200 px-3 py-2 font-medium align-top">
+                  카테고리 정의서
+                </td>
+                <td className="border border-neutral-200 px-3 py-2 text-black align-top">
+                  L1·L2 각각의 의미, 포함 예시 5~6개, 제외 예시, 경계 사례를
+                  함께 제공해 카테고리 간 혼동을 줄였습니다.
+                </td>
+              </tr>
+              <tr>
+                <td className="border border-neutral-200 px-3 py-2 font-medium align-top">
+                  분류 근거 동반 출력
+                </td>
+                <td className="border border-neutral-200 px-3 py-2 text-black align-top">
+                  단순 라벨이 아니라 분류의 근거가 된 리뷰 표현을 함께 출력하도록
+                  지시해, 추후 사람이 검토할 때 판단 근거를 빠르게 확인할 수
+                  있습니다.
+                </td>
+              </tr>
+              <tr>
+                <td className="border border-neutral-200 px-3 py-2 font-medium align-top">
+                  출력 포맷 고정
+                </td>
+                <td className="border border-neutral-200 px-3 py-2 text-black align-top">
+                  JSON 스키마로 신뢰도 점수(0~1)와 대안 가설을 함께 기록하도록
+                  강제해, 후속 집계·검증을 자동화할 수 있게 했습니다.
+                </td>
+              </tr>
+              <tr>
+                <td className="border border-neutral-200 px-3 py-2 font-medium align-top">
+                  신뢰도 임계값
+                </td>
+                <td className="border border-neutral-200 px-3 py-2 text-black align-top">
+                  0.5 미만은 강제 분류 대신 미분류로 표시하도록 명시. 통계
+                  오염을 막고 사람의 검토 대상을 명확히 분리합니다.
+                </td>
+              </tr>
+              <tr>
+                <td className="border border-neutral-200 px-3 py-2 font-medium align-top">
+                  생성 다양성 통제
+                </td>
+                <td className="border border-neutral-200 px-3 py-2 text-black align-top">
+                  Temperature를 낮게 설정해 같은 리뷰에 대한 분류 결과가 흔들리지
+                  않도록 했습니다.
+                </td>
+              </tr>
+              <tr>
+                <td className="border border-neutral-200 px-3 py-2 font-medium align-top">
+                  도메인 컨텍스트 명시
+                </td>
+                <td className="border border-neutral-200 px-3 py-2 text-black align-top">
+                  토스 앱·금융 서비스라는 전제와 한국어 리뷰의 톤을 시스템
+                  프롬프트에 못박아, 일반적 해석으로 빠지지 않도록 했습니다.
+                </td>
+              </tr>
+              <tr>
+                <td className="border border-neutral-200 px-3 py-2 font-medium align-top">
+                  반복 개선 루프
+                </td>
+                <td className="border border-neutral-200 px-3 py-2 text-black align-top">
+                  오분류 사례를 모아 정의서와 예시를 보강하고, 자주 헷갈리는
+                  카테고리 페어는 별도 가이드라인을 추가했습니다.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3 className="text-base font-semibold text-black pt-2">정확도 검증</h3>
+        <p>
+          분류 가이드라인이 충분히 좋은지 판단하려면 사람의 라벨과 비교해야
+          합니다. 본 프로젝트는 다음 반복 절차로 가이드라인의 품질을
+          끌어올립니다.
+        </p>
+        <ol className="list-decimal pl-5 space-y-1.5">
+          <li>
+            <strong>분류 기준 선정</strong> — 카테고리 정의, 포함·제외 예시,
+            경계 사례를 정리한 가이드라인 파일(.md)을 작성합니다.
+          </li>
+          <li>
+            <strong>샘플 추출</strong> — 검증용 표본 N개를 추출합니다 (AI 예측
+            카테고리 기준 층화 권장).
+          </li>
+          <li>
+            <strong>수동 레이블링</strong> — 추출한 샘플을 사람이 직접 분류해
+            정답 라벨을 만듭니다.
+          </li>
+          <li>
+            <strong>LLM 분류</strong> — 작성한 가이드라인을 시스템 프롬프트로
+            사용해 같은 샘플을 LLM이 분류합니다.
+          </li>
+          <li>
+            <strong>정확도 평가</strong> — 사람 라벨과 LLM 결과를 비교해
+            정확도(accuracy), 재현율(recall), 정밀도(precision)를 카테고리별로
+            산출합니다.
+          </li>
+          <li>
+            <strong>기준 수정</strong> — 결과가 만족스럽지 않으면 가이드라인을
+            보강합니다. 특히 자주 헷갈리는 클래스 간 경계를 명확히 다듬습니다.
+          </li>
+          <li>
+            <strong>재분류</strong> — 수정한 가이드라인으로 동일 샘플을 다시
+            LLM이 분류합니다.
+          </li>
+          <li>
+            <strong>반복 후 채택</strong> — 유의미한 정확도가 나올 때까지
+            5~7단계를 반복하고, 만족 수준에 도달하면 해당 가이드라인을
+            최종으로 채택합니다.
+          </li>
+        </ol>
 
         <h3 className="text-base font-semibold text-black pt-2">
           중요도 정의
