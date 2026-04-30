@@ -3,24 +3,32 @@ import Link from "next/link";
 import MermaidDiagram from "./components/MermaidDiagram";
 import { loadClassifiedReviews } from "./lib/data";
 
-const ANALYSIS_FLOW = `flowchart LR
-    Z["1. 분석 기준 수립<br/>여정 / 문제 타입 / 감정 정의"] --> A["2. 리뷰 수집<br/>Google Play 토스 앱 리뷰"]
-    A --> B["3. 전처리<br/>욕설·중복·길이 필터"]
-    B --> C["4. 샘플링<br/>비용·일관성 고려, 최신 리뷰 일부"]
-    C --> D["5. AI 분류<br/>여정 / 문제 타입 / 감정 + 신뢰도·대안 가설"]
-    D --> E{"6. 신뢰도 분기"}
-    E -- "≥ 50%" --> F["본 분석<br/>차원별 집계·우선순위"]
-    E -- "< 50%" --> G["_미분류<br/>사람이 직접 분류"]
-    F --> H["7. 대시보드"]
-    G --> H
+const ANALYSIS_FLOW = `%%{init: {"flowchart": {"htmlLabels": true, "useMaxWidth": true, "curve": "basis", "padding": 4, "nodeSpacing": 25, "rankSpacing": 30}, "themeVariables": {"fontSize": "12px"}}}%%
+flowchart TD
+    A["1. 분류 기준 수립<br/>가이드라인 .md + JSON Schema"] --> B["2. 리뷰 수집·전처리<br/>욕설·중복·길이 필터"]
+    B --> C["3. 검증 표본 추출<br/>층화 100 + 불확실 50 = 150건"]
+    C --> D["4. 3-way LLM 라벨링<br/>Sonnet 4.6 · Haiku 4.5 · GPT-5.4 mini"]
+    D --> E["5. 불일치 항목 수동 라벨링"]
+    E --> G["6. Haiku 평가<br/>정확도 · 혼동행렬 · calibration"]
+    G --> H{"7. 합격선?"}
+    H -- "미달" --> I["8. LLM이 가이드라인 수정안<br/>사람 검수 → Haiku 재분류 (최대 4라운드)"]
+    I --> G
+    H -- "도달" --> J["9. 전체 데이터 재분류"]
+    J --> K{"10. 신뢰도 분기"}
+    K -- "≥ 0.5" --> L["본 분석<br/>차원별 집계·우선순위"]
+    K -- "< 0.5" --> M["_미분류<br/>사람 검토"]
+    L --> N["11. 대시보드"]
+    M --> N
     classDef step fill:#fff,stroke:#d4d4d4,color:#171717
     classDef branch fill:#fafafa,stroke:#a3a3a3,color:#171717
     classDef good fill:#ecfdf5,stroke:#a7f3d0,color:#065f46
     classDef warn fill:#fffbeb,stroke:#fde68a,color:#92400e
-    class Z,A,B,C,D,H step
-    class E branch
-    class F good
-    class G warn
+    classDef loop fill:#eff6ff,stroke:#bfdbfe,color:#1e40af
+    class A,B,C,D,E,G,J,N step
+    class H,K branch
+    class L good
+    class M warn
+    class I loop
 `;
 
 const journeyStages = [
@@ -434,8 +442,12 @@ export default async function HomePage() {
       <Section title="분석 방법">
         <h3 className="text-base font-semibold text-black">사용 모델</h3>
         <p>
-          분류 작업에는 Anthropic의 Claude Haiku 4.5 모델을 사용합니다. 비용과
-          분류 품질의 균형을 고려해 선정했습니다.
+          실제 분류 작업에는 Anthropic의 <strong>Claude Haiku 4.5</strong>를
+          사용합니다. 비용과 분류 품질의 균형을 고려해 선정했습니다. 다만
+          가이드라인 품질을 검증하는 단계에서는{" "}
+          <strong>Claude Sonnet 4.6</strong>과 <strong>GPT-5.4 mini</strong>
+          를 추가로 호출해, 서로 다른 회사의 모델 세 개가 합의한 라벨을 정답으로
+          사용합니다.
         </p>
 
         <h3 className="text-base font-semibold text-black pt-2">전처리</h3>
@@ -532,8 +544,10 @@ export default async function HomePage() {
                   출력 포맷 고정
                 </td>
                 <td className="border border-neutral-200 px-3 py-2 text-black align-top">
-                  JSON 스키마로 신뢰도 점수(0~1)와 대안 가설을 함께 기록하도록
-                  강제해, 후속 집계·검증을 자동화할 수 있게 했습니다.
+                  Anthropic Structured Outputs(JSON Schema 강제) 기능을 사용해
+                  신뢰도 점수(0~1)와 대안 가설을 정해진 형식으로만 출력하도록
+                  묶었습니다. 디코딩 단계에서 양식 위반 토큰을 차단하므로 파싱
+                  실패가 원천 제거되며, 후속 집계·검증을 자동화할 수 있습니다.
                 </td>
               </tr>
               <tr>
@@ -576,48 +590,63 @@ export default async function HomePage() {
           </table>
         </div>
 
-        <h3 className="text-base font-semibold text-black pt-2">정확도 검증</h3>
+        <h3 className="text-base font-semibold text-black pt-2">
+          정확도 검증 (반복 개선 루프)
+        </h3>
         <p>
-          분류 가이드라인이 충분히 좋은지 판단하려면 사람의 라벨과 비교해야
-          합니다. 본 프로젝트는 다음 반복 절차로 가이드라인의 품질을
-          끌어올립니다.
+          분류 가이드라인이 충분히 좋은지 확인하려면 정답과 비교해야 합니다.
+          사람이 전수 라벨링하는 비용을 줄이기 위해, 서로 다른 회사의 LLM 세
+          개가 합의한 결과를 정답으로 사용하고, 합의가 불일치한 케이스만
+          사람이 수동 라벨링하는 방식을 채택했습니다.
+          <sup>
+            <a href="#fn-3" className="text-blue-600 hover:underline ml-0.5">
+              3)
+            </a>
+          </sup>
         </p>
         <ol className="list-decimal pl-5 space-y-1.5">
           <li>
-            <strong>분류 기준 선정</strong> — 카테고리 정의, 포함·제외 예시,
-            경계 사례를 정리한 가이드라인 파일(.md)을 작성합니다.
+            <strong>가이드라인 정비</strong> — 기존 분류 기준에 각 예시별
+            &quot;왜 이 라벨인가&quot; 한 줄 주석과 Structured Outputs용 JSON
+            Schema를 추가합니다.
           </li>
           <li>
-            <strong>샘플 추출</strong> — 검증용 표본 N개를 추출합니다 (AI 예측
-            카테고리 기준 층화 권장).
+            <strong>표본 추출</strong> — 층화 100건과 불확실성(신뢰도 0.6 미만
+            또는 검수 대기) 50건을 합쳐 총 150건을 검증용으로 추출합니다.
           </li>
           <li>
-            <strong>수동 레이블링</strong> — 추출한 샘플을 사람이 직접 분류해
-            정답 라벨을 만듭니다.
+            <strong>3-way 자동 라벨링</strong> — Claude Sonnet 4.6, Claude
+            Haiku 4.5, GPT-5.4 mini 세 모델이 동일 표본을 각자 분류합니다.
           </li>
           <li>
-            <strong>LLM 분류</strong> — 작성한 가이드라인을 시스템 프롬프트로
-            사용해 같은 샘플을 LLM이 분류합니다.
+            <strong>합의 자동 채택 / 불일치 수동 라벨링</strong> — 세 모델이
+            모두 같은 라벨을 낸 경우는 정답으로 자동 채택하고, 한 모델이라도
+            다르게 분류한 케이스만 사람이 수동 라벨링합니다.
           </li>
           <li>
-            <strong>정확도 평가</strong> — 사람 라벨과 LLM 결과를 비교해
-            정확도(accuracy), 재현율(recall), 정밀도(precision)를 카테고리별로
-            산출합니다.
+            <strong>평가</strong> — Haiku 결과를 정확도·혼동행렬·calibration으로
+            평가합니다.
           </li>
           <li>
-            <strong>기준 수정</strong> — 결과가 만족스럽지 않으면 가이드라인을
-            보강합니다. 특히 자주 헷갈리는 클래스 간 경계를 명확히 다듬습니다.
+            <strong>반복 개선 루프</strong> — 합격선 미달 시 LLM이 혼동행렬을
+            입력으로 받아 가이드라인 수정안을 직접 작성하고, 사람 검수 후 동일
+            표본을 재분류합니다. 최대 4라운드까지 반복합니다.
+            <sup>
+              <a href="#fn-4" className="text-blue-600 hover:underline ml-0.5">
+                4)
+              </a>
+            </sup>
           </li>
           <li>
-            <strong>재분류</strong> — 수정한 가이드라인으로 동일 샘플을 다시
-            LLM이 분류합니다.
-          </li>
-          <li>
-            <strong>반복 후 채택</strong> — 유의미한 정확도가 나올 때까지
-            5~7단계를 반복하고, 만족 수준에 도달하면 해당 가이드라인을
-            최종으로 채택합니다.
+            <strong>전체 재분류</strong> — 확정 가이드라인으로 전체 데이터를
+            다시 분류해 대시보드에 반영합니다.
           </li>
         </ol>
+        <p className="pt-2">
+          <strong>종료 조건</strong>은 셋 중 하나입니다 — 합격선 도달 (L1
+          정확도 85% · L2 70% · 감정 90% · 여정 85%), 라운드 4 도달, 또는
+          macro-F1 변동이 1pp 미만으로 2회 연속 유지.
+        </p>
 
         <h3 className="text-base font-semibold text-black pt-2">
           중요도 정의
@@ -693,6 +722,31 @@ export default async function HomePage() {
               도구 개발 및 유용성 검증
             </em>
             . Journal of Integrated Design Research, 24(3), 95–112.
+          </li>
+          <li id="fn-3" className="scroll-mt-20">
+            3) Zheng, L., et al. (2023). Judging LLM-as-a-Judge with MT-Bench
+            and Chatbot Arena. <em>NeurIPS 2023</em>.{" "}
+            <a
+              href="https://arxiv.org/abs/2306.05685"
+              className="text-blue-600 hover:underline"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              arxiv.org/abs/2306.05685
+            </a>
+          </li>
+          <li id="fn-4" className="scroll-mt-20">
+            4) Efficient Prompt Optimization for Relevance Evaluation via
+            LLM-Based Confusion Matrix Feedback (APO-CF) (2025).{" "}
+            <em>MDPI Applied Sciences</em>, 15(9), 5198.{" "}
+            <a
+              href="https://www.mdpi.com/2076-3417/15/9/5198"
+              className="text-blue-600 hover:underline"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              mdpi.com/2076-3417/15/9/5198
+            </a>
           </li>
         </ol>
       </Section>
