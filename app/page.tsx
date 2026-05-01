@@ -129,8 +129,22 @@ const problemTypes: {
         name: "CS 불만",
         examples: ["고객센터에 연락이 안 돼요", "상담사 응대가 미흡합니다"],
       },
+      {
+        name: "기능 요청",
+        examples: [
+          "토스증권 전용 앱 만들어주세요",
+          "주식창에 메모 기능 넣어주세요",
+        ],
+      },
+      {
+        name: "기능 제약",
+        examples: [
+          "충전이 천원 단위로만 됩니다",
+          "모바일 신분증으로는 인증이 안 되네요",
+        ],
+      },
     ],
-    meaning: "정책 결정에 대한 불만",
+    meaning: "정책 결정에 대한 불만·요구",
   },
   {
     l1: "긍정",
@@ -328,7 +342,7 @@ export default async function HomePage() {
         </div>
 
         <h3 className="text-base font-semibold text-black pt-2">
-          기준 B — 문제 타입 (L1 6개 / L2 12개)
+          기준 B — 문제 타입 (L1 6개 / L2 14개)
         </h3>
         <p className="text-black">
           어떤 종류의 문제인지 보여줍니다. L1은 요약 단위이며, L2는 액션
@@ -649,6 +663,128 @@ export default async function HomePage() {
         </p>
 
         <h3 className="text-base font-semibold text-black pt-2">
+          실제 검증 진행 결과
+        </h3>
+        <p>
+          본 프로젝트에서 4라운드를 실제로 수행한 결과입니다. 자동 가이드라인
+          미세조정의 한계와, 사람의 분류 체계 재설계가 정확도 돌파에 결정적이었던
+          과정을 그대로 기록합니다.
+        </p>
+        <div className="overflow-x-auto">
+          <table className="text-sm border-collapse border border-neutral-200 bg-white">
+            <thead className="bg-neutral-50">
+              <tr>
+                <th className="border border-neutral-200 px-3 py-2 text-left font-medium w-32">라운드</th>
+                <th className="border border-neutral-200 px-3 py-2 text-left font-medium">변경 내용</th>
+                <th className="border border-neutral-200 px-3 py-2 text-left font-medium w-28">합격 차원</th>
+                <th className="border border-neutral-200 px-3 py-2 text-left font-medium">결과</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td className="border border-neutral-200 px-3 py-2 font-medium align-top">r0 (원본)</td>
+                <td className="border border-neutral-200 px-3 py-2 text-black align-top">초기 가이드라인 — 6 L1 / 12 L2</td>
+                <td className="border border-neutral-200 px-3 py-2 text-black align-top">3/4</td>
+                <td className="border border-neutral-200 px-3 py-2 text-black align-top">L1만 5.7%p 미달, 다른 차원은 합격</td>
+              </tr>
+              <tr>
+                <td className="border border-neutral-200 px-3 py-2 font-medium align-top">r1, r2</td>
+                <td className="border border-neutral-200 px-3 py-2 text-black align-top">Sonnet이 혼동행렬을 보고 작성한 가이드라인 수정안 자동 반영 (신뢰도 임계값 상향, 경계 케이스 보강 등)</td>
+                <td className="border border-neutral-200 px-3 py-2 text-black align-top">1/4</td>
+                <td className="border border-neutral-200 px-3 py-2 text-black align-top">회귀 — 미세조정만으로는 한계 못 넘음. 한 차원 잡으면 다른 차원이 깎임.</td>
+              </tr>
+              <tr className="bg-emerald-50">
+                <td className="border border-neutral-200 px-3 py-2 font-medium align-top">r3 (분류 체계 확장)</td>
+                <td className="border border-neutral-200 px-3 py-2 text-black align-top">사람이 수동 라벨링 도중 표본의 13.3%가 기존 체계에 안 맞음을 발견 (기능 추가 요청, 비-금전적 기능 정책 제약 등). <strong>정책·CS</strong> 산하에 신규 L2 두 개 추가 — <strong>기능 요청</strong>, <strong>기능 제약</strong></td>
+                <td className="border border-neutral-200 px-3 py-2 text-black align-top font-semibold">4/4 ★</td>
+                <td className="border border-neutral-200 px-3 py-2 text-black align-top">편향 보정 후 평가에서 합격선 통과. 모델 간 만장일치 비율 16% → 33%로 두 배.</td>
+              </tr>
+              <tr>
+                <td className="border border-neutral-200 px-3 py-2 font-medium align-top">r4</td>
+                <td className="border border-neutral-200 px-3 py-2 text-black align-top">r3에서 발견된 &quot;기능 요청 과사용&quot; 잡는 함정 패턴 5종 추가</td>
+                <td className="border border-neutral-200 px-3 py-2 text-black align-top">—</td>
+                <td className="border border-neutral-200 px-3 py-2 text-black align-top">함정 패턴 효과 없어 r3 상태로 부분 롤백.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3 className="text-base font-semibold text-black pt-2">
+          Ground Truth 편향 보정
+        </h3>
+        <p>
+          초기 ground_truth는 r0 시기 모델 합의 + 사람 수동 라벨로 구축했는데,
+          신규 카테고리(기능 요청·기능 제약)를 모르던 시점이라 r3 평가 결과가
+          편향됐습니다. r3 모델 두 개(Sonnet 4.6, GPT-5.4 mini)의 독립 합의 71건을
+          참조 정답으로 사용해 Haiku 4.5를 재평가하면 다음과 같습니다.
+        </p>
+        <div className="overflow-x-auto">
+          <table className="text-sm border-collapse border border-neutral-200 bg-white">
+            <thead className="bg-neutral-50">
+              <tr>
+                <th className="border border-neutral-200 px-3 py-2 text-left font-medium">차원</th>
+                <th className="border border-neutral-200 px-3 py-2 text-left font-medium">목표</th>
+                <th className="border border-neutral-200 px-3 py-2 text-left font-medium">편향 GT</th>
+                <th className="border border-neutral-200 px-3 py-2 text-left font-medium">편향 보정 후</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td className="border border-neutral-200 px-3 py-2 align-top">여정</td>
+                <td className="border border-neutral-200 px-3 py-2 text-black align-top">≥85%</td>
+                <td className="border border-neutral-200 px-3 py-2 text-black align-top">87.3% ✓</td>
+                <td className="border border-neutral-200 px-3 py-2 text-black align-top font-semibold">90.1% ✓</td>
+              </tr>
+              <tr>
+                <td className="border border-neutral-200 px-3 py-2 align-top">문제 타입 L1</td>
+                <td className="border border-neutral-200 px-3 py-2 text-black align-top">≥85%</td>
+                <td className="border border-neutral-200 px-3 py-2 text-black align-top">75.3% ✗</td>
+                <td className="border border-neutral-200 px-3 py-2 text-black align-top font-semibold">85.9% ✓</td>
+              </tr>
+              <tr>
+                <td className="border border-neutral-200 px-3 py-2 align-top">문제 타입 L2</td>
+                <td className="border border-neutral-200 px-3 py-2 text-black align-top">≥70%</td>
+                <td className="border border-neutral-200 px-3 py-2 text-black align-top">69.3% ✗</td>
+                <td className="border border-neutral-200 px-3 py-2 text-black align-top font-semibold">81.7% ✓</td>
+              </tr>
+              <tr>
+                <td className="border border-neutral-200 px-3 py-2 align-top">감정</td>
+                <td className="border border-neutral-200 px-3 py-2 text-black align-top">≥90%</td>
+                <td className="border border-neutral-200 px-3 py-2 text-black align-top">90.0% ✓</td>
+                <td className="border border-neutral-200 px-3 py-2 text-black align-top font-semibold">93.0% ✓</td>
+              </tr>
+              <tr className="bg-neutral-50">
+                <td className="border border-neutral-200 px-3 py-2 align-top font-medium">합격</td>
+                <td className="border border-neutral-200 px-3 py-2 text-black align-top">4</td>
+                <td className="border border-neutral-200 px-3 py-2 text-black align-top">2/4</td>
+                <td className="border border-neutral-200 px-3 py-2 text-black align-top font-bold">4/4</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p className="text-xs text-neutral-600 pt-1">
+          예: &quot;홈화면 설정에 토스페이좀 추가해주세요&quot; — 편향 GT는 옛 스키마
+          기준 &quot;UI·안내 / 안내·메시지 부족&quot;으로 라벨됐지만, r3 모델 둘은
+          정확히 &quot;정책·CS / 기능 요청&quot;으로 잡음. 이런 케이스 13건이
+          편향의 정체.
+        </p>
+
+        <h3 className="text-base font-semibold text-black pt-2">
+          LLM 기반 노이즈 필터
+        </h3>
+        <p>
+          키워드 기반 욕설·중복·길이 필터로는 잡히지 않는 의미 없는 리뷰
+          (농담·조롱·단서 없는 일반 불만 등)는 분류 단계에서 _미분류로 빠지며
+          신호를 흐립니다. 키워드 필터 통과 후 추가로 LLM에 &quot;이 리뷰가 UX
+          분석에 사용 가치가 있는가?&quot;를 물어 노이즈를 사전에 분리합니다.
+        </p>
+        <ul className="list-disc pl-5 space-y-1">
+          <li>검증 표본 150건 기준: Precision 71% · Recall 67% · Accuracy 88%</li>
+          <li>오탐 8건 중 다수는 토스와 무관한 리뷰(예: &quot;사장님이 친절하시고 빵 커피 맛있어용&quot;) 또는 비꼬기 — 사람 라벨이 오히려 의문이고 LLM 판단이 더 타당</li>
+          <li>노이즈로 분류된 리뷰는 분석 풀에서 제외, 검수 위젯에서는 별도 확인 가능</li>
+        </ul>
+
+        <h3 className="text-base font-semibold text-black pt-2">
           중요도 정의
         </h3>
         <p>
@@ -662,15 +798,28 @@ export default async function HomePage() {
         <ul className="list-disc pl-5 space-y-1">
           <li>
             LLM 분류는 100% 정확하지 않으므로, 해석할 때 신뢰도 점수를 가중치로
-            함께 보아야 합니다.
+            함께 보아야 합니다. 신뢰도 [0.5, 0.7) 구간은 실제 정확도가 더 낮은
+            과신 구간이라 별도 검수 권장.
+          </li>
+          <li>
+            <strong>자동 가이드라인 미세조정의 한계</strong> — LLM이 혼동행렬을
+            보고 작성하는 가이드라인 수정안은 모델 자체의 분류 능력보다는 분류
+            체계의 표현력에 막혔을 때는 회귀를 유발했습니다. 실제 정확도 돌파는
+            사람이 신규 카테고리(기능 요청·기능 제약)를 추가했을 때 발생.
+          </li>
+          <li>
+            <strong>Ground Truth 편향</strong> — 분류 체계가 진화하면 그에 맞춰
+            정답셋도 재라벨링되어야 합니다. 본 프로젝트는 r3 신규 카테고리 도입
+            후 일부만 사후 갱신했고, r3 모델 독립 합의 기준의 보정된 평가만
+            합격선을 통과합니다.
           </li>
           <li>
             Google Play 리뷰는 부정 의견이 과대 표집되는 경향이 있습니다 (만족한
             사용자는 리뷰를 잘 작성하지 않습니다).
           </li>
           <li>
-            욕설·비방·비아냥성 리뷰는 전처리 단계에서 제거되었으며, 이 과정에서
-            일부 강한 감정 신호가 손실될 수 있습니다.
+            욕설·비방·비아냥성 리뷰는 키워드 필터 + LLM 노이즈 필터로 제거됩니다.
+            이 과정에서 일부 강한 감정 신호가 손실될 수 있습니다.
           </li>
           <li>
             본 분석은 스냅샷 기반이므로 시계열 추세 분석은 제공하지 않습니다.
