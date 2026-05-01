@@ -222,6 +222,13 @@ export default async function HomePage() {
         </h2>
       </div>
 
+      <Section title="목적">
+        <ol className="list-decimal pl-5 space-y-2">
+          <li>모델의 분류 정확도를 향상시킨다.</li>
+          <li>분류된 데이터를 대시보드로 제공한다.</li>
+        </ol>
+      </Section>
+
       <Section title="개요">
         <h3 className="text-base font-semibold text-black">문제 정의</h3>
         <ol className="list-decimal pl-5 space-y-2">
